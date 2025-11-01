@@ -1,12 +1,14 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebglAddon } from '@xterm/addon-webgl'
 
-const term = new Terminal({
+const terminal = new Terminal({
   fontSize: 18,
   scrollback: 1000,
   convertEol: true,
   cursorBlink: true,
   cursorStyle: 'bar',
+  allowProposedApi: true,
   rightClickSelectsWord: true,
   drawBoldTextInBrightColors: true,
   fontFamily:
@@ -34,18 +36,23 @@ const term = new Terminal({
   },
 })
 
+const webglAddon = new WebglAddon()
+webglAddon.onContextLoss(event => {
+  console.error('WebGL context lost', event)
+  webglAddon.dispose()
+})
+
 const fitAddon = new FitAddon()
-term.loadAddon(fitAddon)
 
 const terminalElement = document.querySelector('div#terminal')
 if (!terminalElement) throw new Error('Terminal element not found')
 
-term.open(terminalElement)
+terminal.loadAddon(webglAddon)
+terminal.open(terminalElement)
+terminal.loadAddon(fitAddon)
 
 const fitTerminal = () => fitAddon.fit() ?? void 0
-
 setTimeout(fitTerminal, 100)
-
 window.addEventListener('resize', _ => setTimeout(fitTerminal, 50))
 
 /** @type {Array<string>} */
@@ -53,8 +60,10 @@ const commandHistory = []
 let [currentLine, cursorPosition] = ['', 0]
 let [historyIndex, isExecuting] = [-1, false]
 
+const PROMPT = '\x1b[32m$\x1b[0m '
+
 const prompt = () => [
-  term.write('\r\n\x1b[32m$\x1b[0m '),
+  terminal.write(`\r\n${PROMPT}`),
   (currentLine = ''),
   (cursorPosition = 0),
 ]
@@ -101,21 +110,106 @@ function updateStatus(text, isConnected = true) {
 
 /** @param {string} text */
 function writeToTerminal(text) {
-  if (!term) return
-  term.write(text)
+  if (!terminal) return
+  terminal.write(text)
 }
 
 /** @param {string} text */
 function writeLine(text) {
-  term.writeln(text)
+  terminal.writeln(text)
 }
+
+function renderCurrentInput() {
+  if (cursorPosition < 0) cursorPosition = 0
+  if (cursorPosition > currentLine.length) cursorPosition = currentLine.length
+  const moveLeft = currentLine.length - cursorPosition
+  let output = `\r\x1b[K${PROMPT}${currentLine}`
+  if (moveLeft > 0) output += `\x1b[${moveLeft}D`
+  terminal.write(output)
+}
+
+function findPreviousWordBoundary() {
+  if (cursorPosition === 0) return 0
+  let index = cursorPosition
+  while (index > 0 && currentLine[index - 1] === ' ') index--
+  while (index > 0 && currentLine[index - 1] !== ' ') index--
+  return index
+}
+
+function findNextWordBoundary() {
+  if (cursorPosition === currentLine.length) return currentLine.length
+  let index = cursorPosition
+  while (index < currentLine.length && currentLine[index] === ' ') index++
+  while (index < currentLine.length && currentLine[index] !== ' ') index++
+  return index
+}
+
+/**
+ * @param {string} text
+ */
+function insertText(text) {
+  if (!text) return
+  currentLine =
+    currentLine.slice(0, cursorPosition) +
+    text +
+    currentLine.slice(cursorPosition)
+  cursorPosition += text.length
+  historyIndex = commandHistory.length
+  renderCurrentInput()
+}
+
+function handleEnter() {
+  writeLine('')
+  historyIndex = commandHistory.length
+  if (currentLine.trim()) {
+    commandHistory.push(currentLine)
+    historyIndex = commandHistory.length
+    executeCommand(currentLine)
+  } else prompt()
+}
+
+/**
+ * @param {string} text
+ */
+function applyTextInput(text) {
+  if (!text) return
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const segments = normalized.split('\n')
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index]
+    if (segment) insertText(segment)
+    if (index < segments.length - 1) {
+      handleEnter()
+      if (isExecuting) return
+    }
+  }
+}
+
+terminal.attachCustomKeyEventHandler(event => {
+  if (isExecuting) return true
+  if (!event.metaKey || event.altKey || event.ctrlKey) return true
+  const { key, code } = event
+  const targetsLeft =
+    key === 'ArrowLeft' || key === 'Home' || code === 'ArrowLeft'
+  const targetsRight =
+    key === 'ArrowRight' || key === 'End' || code === 'ArrowRight'
+  if (!targetsLeft && !targetsRight) return true
+  event.preventDefault()
+  const targetPosition = targetsLeft ? 0 : currentLine.length
+  if (cursorPosition !== targetPosition) {
+    cursorPosition = targetPosition
+    historyIndex = commandHistory.length
+    renderCurrentInput()
+  }
+  return false
+})
 
 /** @param {string} command */
 async function executeCommand(command) {
   if (!command.trim()) return prompt()
   isExecuting = true
 
-  if (command.trim() === 'clear') return [term.clear(), prompt()]
+  if (command.trim() === 'clear') return [terminal.clear(), prompt()]
   try {
     const response = await fetch('/api/exec', {
       method: 'POST',
@@ -138,28 +232,30 @@ async function executeCommand(command) {
   prompt()
 }
 
-term.onData(data => {
+terminal.onData(data => {
   if (isExecuting) return
-  const code = data.charCodeAt(0)
-  if (code === 13) {
-    writeLine('')
-    if (currentLine.trim()) {
-      commandHistory.push(currentLine)
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: _
+  const metaNavigationMatch = data.match(/^\x1b\[[0-9]+;9([CDFH])$/)
+  if (metaNavigationMatch) {
+    const navigationKey = metaNavigationMatch[1]
+    const targetPosition =
+      navigationKey === 'D' || navigationKey === 'H' ? 0 : currentLine.length
+    if (cursorPosition !== targetPosition) {
+      cursorPosition = targetPosition
       historyIndex = commandHistory.length
-      executeCommand(currentLine)
-    } else {
-      prompt()
+      renderCurrentInput()
     }
     return
   }
-  if (code === 127) {
-    if (cursorPosition > 0) {
-      currentLine =
-        currentLine.slice(0, cursorPosition - 1) +
-        currentLine.slice(cursorPosition)
-      cursorPosition--
-      term.write('\b \b')
-    }
+
+  if (data.length > 1 && !data.includes('\x1b') && /[\r\n]/.test(data)) {
+    applyTextInput(data)
+    return
+  }
+
+  const code = data.charCodeAt(0)
+  if (code === 13) {
+    handleEnter()
     return
   }
   if (code === 3) {
@@ -170,63 +266,101 @@ term.onData(data => {
     return
   }
   if (code === 12) {
-    term.clear()
+    terminal.clear()
     prompt()
     return
   }
   if (data === '\x1b[A') {
     if (historyIndex > 0) {
       historyIndex--
-      term.write('\r\x1b[K\x1b[32m$\x1b[0m ')
       currentLine = commandHistory[historyIndex]
       cursorPosition = currentLine.length
-      writeToTerminal(currentLine)
+      renderCurrentInput()
     }
     return
   }
   if (data === '\x1b[B') {
     if (historyIndex < commandHistory.length - 1) {
       historyIndex++
-      term.write('\r\x1b[K\x1b[32m$\x1b[0m ')
       currentLine = commandHistory[historyIndex]
       cursorPosition = currentLine.length
-      writeToTerminal(currentLine)
+      renderCurrentInput()
     } else if (historyIndex === commandHistory.length - 1) {
       historyIndex = commandHistory.length
-      term.write('\r\x1b[K\x1b[32m$\x1b[0m ')
       currentLine = ''
       cursorPosition = 0
+      renderCurrentInput()
     }
     return
   }
-  if (code >= 32 && code < 127) {
-    currentLine =
-      currentLine.slice(0, cursorPosition) +
-      data +
-      currentLine.slice(cursorPosition)
-    cursorPosition++
-    writeToTerminal(data)
+  if (/^[\x20-\x7e]+$/.test(data)) {
+    insertText(data)
   }
 })
 
-term.onKey(event => {
-  if (event.key === 'Backspace') {
+terminal.onKey(({ domEvent }) => {
+  if (isExecuting) return
+  const { key: domKey, altKey, metaKey } = domEvent
+
+  if (domKey === 'Backspace') {
+    domEvent.preventDefault()
     if (cursorPosition > 0) {
       currentLine =
         currentLine.slice(0, cursorPosition - 1) +
         currentLine.slice(cursorPosition)
       cursorPosition--
-      term.write('\b \b')
+      historyIndex = commandHistory.length
+      renderCurrentInput()
     }
+    return
   }
-})
 
-term.onKey(event => {
-  if (event.key === 'Delete') {
+  if (domKey === 'Delete') {
+    domEvent.preventDefault()
     if (cursorPosition < currentLine.length) {
       currentLine =
         currentLine.slice(0, cursorPosition) +
         currentLine.slice(cursorPosition + 1)
+      historyIndex = commandHistory.length
+      renderCurrentInput()
+    }
+    return
+  }
+
+  if (domKey === 'ArrowLeft') {
+    domEvent.preventDefault()
+    const originalPosition = cursorPosition
+    if (metaKey) cursorPosition = 0
+    else if (altKey) cursorPosition = findPreviousWordBoundary()
+    else if (cursorPosition > 0) cursorPosition--
+    if (cursorPosition !== originalPosition) renderCurrentInput()
+    return
+  }
+
+  if (domKey === 'ArrowRight') {
+    domEvent.preventDefault()
+    const originalPosition = cursorPosition
+    if (metaKey) cursorPosition = currentLine.length
+    else if (altKey) cursorPosition = findNextWordBoundary()
+    else if (cursorPosition < currentLine.length) cursorPosition++
+    if (cursorPosition !== originalPosition) renderCurrentInput()
+    return
+  }
+
+  if (domKey === 'Home') {
+    domEvent.preventDefault()
+    if (cursorPosition !== 0) {
+      cursorPosition = 0
+      renderCurrentInput()
+    }
+    return
+  }
+
+  if (domKey === 'End') {
+    domEvent.preventDefault()
+    if (cursorPosition !== currentLine.length) {
+      cursorPosition = currentLine.length
+      renderCurrentInput()
     }
   }
 })

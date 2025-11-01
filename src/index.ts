@@ -24,20 +24,22 @@ export default {
 
     const url = new URL(request.url)
 
-    if (url.pathname === '/ping' || url.pathname === '/health')
-      return new Response('OK')
+    if (url.pathname === '/') return env.Web.fetch(request)
+
+    if (
+      url.pathname === '/ping' ||
+      url.pathname === '/api/ping' ||
+      url.pathname === '/health'
+    )
+      return new Response('ok')
 
     // Required for preview URLs (if exposing ports)
     const proxyResponse = await proxyToSandbox(request, env)
     if (proxyResponse) return proxyResponse
 
-    if (url.pathname === '/api/ping') return Response.json({ pong: true })
-
     if (url.pathname === '/api/exec') return handleExec(request, env)
 
     if (url.pathname === '/api/reset') return handleReset(request, env)
-
-    if (url.pathname === '/') return env.Web.fetch(request)
 
     return new Response(null, { status: 404 })
   },
@@ -67,7 +69,7 @@ async function handleExec(
 
     // Execute the command
     const result = await sandbox.exec(command, {
-      timeout: 30_000, // 30s
+      timeout: 25_000, // 25s
     })
 
     return Response.json(
@@ -81,6 +83,7 @@ async function handleExec(
     )
   } catch (error) {
     console.error(error)
+
     return Response.json(
       {
         success: false,
@@ -115,10 +118,11 @@ async function handleReset(
     )
   } catch (error) {
     console.error(error)
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error'
     return Response.json(
-      { success: false, error: errorMessage },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     )
   }

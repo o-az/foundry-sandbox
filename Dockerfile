@@ -2,6 +2,7 @@
 FROM docker.io/cloudflare/sandbox:0.4.14
 
 ENV FOUNDRY_DISABLE_NIGHTLY_WARNING=1
+ENV NODE_OPTIONS="npm_config_yes=true"
 
 RUN npm add --global @foundry-rs/cast@nightly && \
   npm add --global @foundry-rs/forge@nightly && \

@@ -25,8 +25,10 @@
   "containers": [
     {
       "name": "sandbox",
+      "max_instances": 10,
       "class_name": "Sandbox",
-      "image": "./Dockerfile"
+      "image": "./Dockerfile",
+      "instance_type": "standard-3"
     }
   ],
   "migrations": [
