@@ -209,7 +209,12 @@ async function executeCommand(command) {
   if (!command.trim()) return prompt()
   isExecuting = true
 
-  if (command.trim() === 'clear') return [terminal.clear(), prompt()]
+  if (command.trim() === 'clear') {
+    terminal.clear()
+    isExecuting = false
+    prompt()
+    return
+  }
   try {
     const response = await fetch('/api/exec', {
       method: 'POST',
