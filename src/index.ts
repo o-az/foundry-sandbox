@@ -2,6 +2,7 @@ export { Sandbox } from '@cloudflare/sandbox'
 import { getSandbox, proxyToSandbox } from '@cloudflare/sandbox'
 
 const sessions = new Map<string, string>()
+const COMMAND_WS_PORT = 8080
 
 export default {
   async fetch(request, env, _context) {
@@ -23,6 +24,7 @@ export default {
     }
 
     const url = new URL(request.url)
+    const upgrade = request.headers.get('Upgrade')?.toLowerCase()
 
     if (url.pathname === '/') return env.Web.fetch(request)
 
@@ -32,6 +34,10 @@ export default {
       url.pathname === '/health'
     )
       return new Response('ok')
+
+    if (upgrade === 'websocket' && url.pathname === '/api/ws') {
+      return handleWebSocket(request, env, url)
+    }
 
     // Required for preview URLs (if exposing ports)
     const proxyResponse = await proxyToSandbox(request, env)
@@ -62,9 +68,7 @@ async function handleExec(
       )
     }
 
-    const sandboxId = sessions.get(sessionId) ?? `sandbox-${sessionId}`
-    sessions.set(sessionId, sandboxId)
-
+    const sandboxId = getOrCreateSandboxId(sessionId)
     const sandbox = getSandbox(env.Sandbox, sandboxId)
 
     // Execute the command
@@ -126,4 +130,32 @@ async function handleReset(
       { status: 500 },
     )
   }
+}
+
+function getOrCreateSandboxId(sessionId: string): string {
+  const existing = sessions.get(sessionId)
+  if (existing) return existing
+  const sandboxId = `sandbox-${sessionId}`
+  sessions.set(sessionId, sandboxId)
+  return sandboxId
+}
+
+async function handleWebSocket(
+  request: Request,
+  env: Cloudflare.Env,
+  url: URL,
+): Promise<Response> {
+  const sessionId =
+    url.searchParams.get('sessionId') ||
+    request.headers.get('x-sandbox-session-id') ||
+    ''
+
+  if (!sessionId) {
+    return new Response('Missing sessionId', { status: 400 })
+  }
+
+  const sandboxId = getOrCreateSandboxId(sessionId)
+  const sandbox = getSandbox(env.Sandbox, sandboxId)
+
+  return sandbox.wsConnect(request, COMMAND_WS_PORT)
 }

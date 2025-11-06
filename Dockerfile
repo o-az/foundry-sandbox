@@ -10,5 +10,12 @@ RUN npm install --global \
   @foundry-rs/anvil@nightly \
   @foundry-rs/chisel@nightly
 
+COPY scripts/websocket-server.ts websocket-server.ts
+COPY scripts/startup.sh startup.sh
+RUN chmod +x startup.sh
+
+ARG WS_PORT
+ENV WS_PORT=${WS_PORT:-8080}
+
 # Expose any ports you might want to use (optional)
-# EXPOSE 3000 8080
+EXPOSE ${WS_PORT}

@@ -121,6 +121,46 @@ const sessionId =
   `session-${Math.random().toString(36).substring(2, 9)}`
 localStorage.setItem('sessionId', sessionId)
 
+/**
+ * @typedef {Object} ExecResultMessage
+ * @property {'execResult'} type
+ * @property {string} id
+ * @property {boolean} success
+ * @property {string} stdout
+ * @property {string} stderr
+ * @property {number} exitCode
+ */
+
+/**
+ * @typedef {Object} ErrorMessage
+ * @property {'error'} type
+ * @property {string=} id
+ * @property {string} error
+ */
+
+/**
+ * @typedef {Object} PongMessage
+ * @property {'pong'} type
+ * @property {string=} id
+ */
+
+/** @type {WebSocket | undefined} */
+let socket
+/** @type {Promise<WebSocket> | undefined} */
+let connectPromise
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let reconnectTimeout
+/** @type {Map<string, { resolve: (value: ExecResultMessage) => void; reject: (reason: Error) => void }>} */
+const pendingCommands = new Map()
+
+const textDecoder = new TextDecoder()
+const WS_ENDPOINT = '/api/ws'
+
+const createMessageId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `msg-${Math.random().toString(36).slice(2, 10)}`
+
 const statusText = document.querySelector('p#status-text')
 if (!statusText) throw new Error('Status text element not found')
 
@@ -153,6 +193,283 @@ function updateStatus(text, isConnected = true) {
     bottom: 0,
     right: 0,
     margin: '0 18px 8px 0',
+  })
+}
+
+function websocketUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${protocol}://${window.location.host}${WS_ENDPOINT}?sessionId=${encodeURIComponent(sessionId)}`
+}
+
+/**
+ * @param {unknown} reason
+ */
+function rejectAllPending(reason) {
+  if (pendingCommands.size === 0) return
+  const message =
+    typeof reason === 'string'
+      ? reason
+      : reason instanceof Error
+        ? reason.message
+        : 'Connection closed'
+  const error = reason instanceof Error ? reason : new Error(message)
+  for (const pending of pendingCommands.values()) pending.reject(error)
+  pendingCommands.clear()
+}
+
+/**
+ * @param {MessageEvent['data']} data
+ */
+function handleServerMessage(data) {
+  if (data instanceof Blob) {
+    data
+      .text()
+      .then(text => handleServerMessage(text))
+      .catch(error =>
+        console.error('Failed to read binary WebSocket payload', error),
+      )
+    return
+  }
+
+  const raw =
+    typeof data === 'string'
+      ? data
+      : textDecoder.decode(
+          data instanceof ArrayBuffer ? new Uint8Array(data) : data,
+        )
+
+  /** @type {unknown} */
+  let payload
+  try {
+    payload = JSON.parse(raw)
+  } catch (error) {
+    console.warn('Failed to parse WebSocket message', error, raw)
+    return
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    console.warn('Received non-object WebSocket payload', payload)
+    return
+  }
+
+  const record = /** @type {Record<string, unknown>} */ (payload)
+  const payloadType = record.type
+
+  if (
+    typeof payloadType === 'string' &&
+    payloadType === 'execResult' &&
+    typeof record.id === 'string' &&
+    typeof record.success === 'boolean' &&
+    typeof record.stdout === 'string' &&
+    typeof record.stderr === 'string' &&
+    typeof record.exitCode === 'number'
+  ) {
+    const execPayload = /** @type {ExecResultMessage} */ (record)
+    const pending = pendingCommands.get(execPayload.id)
+    if (pending) {
+      pendingCommands.delete(execPayload.id)
+      pending.resolve(execPayload)
+    } else {
+      console.warn(
+        'Received execResult with no pending command',
+        execPayload.id,
+      )
+    }
+    return
+  }
+
+  if (typeof payloadType === 'string' && payloadType === 'error') {
+    const errorPayload = /** @type {ErrorMessage} */ (record)
+    const error = new Error(
+      typeof errorPayload.error === 'string'
+        ? errorPayload.error
+        : 'Unknown error',
+    )
+    if (errorPayload.id && pendingCommands.has(errorPayload.id)) {
+      const pending = pendingCommands.get(errorPayload.id)
+      if (pending) pending.reject(error)
+      pendingCommands.delete(errorPayload.id)
+      return
+    }
+    writeLine(`\r\n\x1b[31m${error.message}\x1b[0m`)
+    return
+  }
+
+  if (
+    typeof payloadType === 'string' &&
+    payloadType === 'pong' &&
+    (record.id === undefined || typeof record.id === 'string')
+  ) {
+    updateStatus('Connected', true)
+    return
+  }
+
+  console.warn('Unhandled WebSocket message', payload)
+}
+
+/**
+ * @param {WebSocket} ws
+ */
+function attachPersistentHandlers(ws) {
+  ws.addEventListener(
+    'message',
+    /**
+     * @param {MessageEvent} event
+     */
+    event => handleServerMessage(event.data),
+  )
+  ws.addEventListener(
+    'error',
+    /**
+     * @param {Event | ErrorEvent} event
+     */
+    event => {
+      console.error('WebSocket error', event)
+    },
+  )
+  ws.addEventListener(
+    'close',
+    /**
+     * @param {CloseEvent} event
+     */
+    event => {
+      if (socket === ws) {
+        socket = undefined
+        updateStatus('Disconnected', false)
+        rejectAllPending('Connection closed')
+        scheduleReconnect()
+      }
+      console.info(
+        `WebSocket closed (code=${event.code}, reason=${event.reason || 'n/a'})`,
+      )
+    },
+    { once: true },
+  )
+}
+
+function scheduleReconnect() {
+  if (reconnectTimeout) return
+  reconnectTimeout = setTimeout(() => {
+    reconnectTimeout = undefined
+    updateStatus('Reconnecting...', false)
+    connectWebSocket().catch(error => {
+      console.error('WebSocket reconnect failed', error)
+      scheduleReconnect()
+    })
+  }, 1500)
+}
+
+function connectWebSocket() {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    return Promise.resolve(socket)
+  }
+  if (connectPromise) return connectPromise
+
+  updateStatus('Connecting...', false)
+
+  connectPromise = new Promise((resolve, reject) => {
+    const ws = new WebSocket(websocketUrl())
+    ws.binaryType = 'arraybuffer'
+
+    const cleanup = () => {
+      ws.removeEventListener('open', handleOpen)
+      ws.removeEventListener('error', handleError)
+      ws.removeEventListener('close', handleCloseBeforeOpen)
+    }
+
+    const timeout = setTimeout(() => {
+      cleanup()
+      try {
+        ws.close()
+      } catch (_error) {
+        // ignore close errors during timeout handling
+      }
+      reject(new Error('WebSocket connection timed out'))
+    }, 10_000)
+
+    const handleOpen = () => {
+      clearTimeout(timeout)
+      cleanup()
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+        reconnectTimeout = undefined
+      }
+      socket = ws
+      attachPersistentHandlers(ws)
+      updateStatus('Connected', true)
+      resolve(ws)
+    }
+
+    /** @param {Event | ErrorEvent} event */
+    const handleError = event => {
+      clearTimeout(timeout)
+      cleanup()
+      reject(
+        event instanceof ErrorEvent
+          ? (event.error ?? new Error('WebSocket connection error'))
+          : new Error('WebSocket connection error'),
+      )
+    }
+
+    /** @param {CloseEvent} event */
+    const handleCloseBeforeOpen = event => {
+      clearTimeout(timeout)
+      cleanup()
+      reject(
+        new Error(
+          `WebSocket closed before opening (code=${event.code ?? 'n/a'})`,
+        ),
+      )
+    }
+
+    ws.addEventListener('open', handleOpen, { once: true })
+    ws.addEventListener('error', handleError, { once: true })
+    ws.addEventListener('close', handleCloseBeforeOpen, { once: true })
+  }).finally(() => {
+    connectPromise = undefined
+  })
+
+  return connectPromise
+}
+
+/**
+ * @param {string} command
+ * @returns {Promise<ExecResultMessage>}
+ */
+async function sendExecCommand(command) {
+  const ws = await connectWebSocket()
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    throw new Error('WebSocket not connected')
+  }
+
+  const id = createMessageId()
+
+  return new Promise((resolve, reject) => {
+    pendingCommands.set(id, {
+      resolve: result => {
+        resolve(result)
+      },
+      reject: error => {
+        reject(error)
+      },
+    })
+
+    try {
+      ws.send(
+        JSON.stringify({
+          type: 'exec',
+          id,
+          command,
+        }),
+      )
+    } catch (error) {
+      pendingCommands.delete(id)
+      reject(
+        error instanceof Error
+          ? error
+          : new Error('Failed to send command payload'),
+      )
+    }
   })
 }
 
@@ -263,25 +580,39 @@ async function executeCommand(command) {
     return
   }
   try {
-    const response = await fetch('/api/exec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command, sessionId }),
-    })
-    const data = await response.json()
-    if (data.success) {
-      if (data.stdout) writeToTerminal('\r\n' + data.stdout + '\r\n')
-      if (data.stderr) writeToTerminal('\r\n\x1b[31m' + data.stderr + '\x1b[0m')
-    } else writeLine('\r\n\x1b[31mError executing command\x1b[0m')
+    const result = await sendExecCommand(command)
+    if (result.stdout) {
+      const output =
+        result.stdout.endsWith('\n') || result.stdout.endsWith('\r')
+          ? result.stdout
+          : `${result.stdout}\n`
+      writeToTerminal('\r\n' + output)
+    }
+    if (result.stderr) {
+      const errorOutput =
+        result.stderr.endsWith('\n') || result.stderr.endsWith('\r')
+          ? result.stderr
+          : `${result.stderr}\n`
+      writeToTerminal('\r\n\x1b[31m' + errorOutput + '\x1b[0m')
+    }
+    if (!result.success && !result.stderr) {
+      writeLine(
+        `\r\n\x1b[31mCommand exited with code ${result.exitCode}\x1b[0m`,
+      )
+    }
   } catch (error) {
     console.error(error)
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error'
-    writeLine(`\r\n\x1b[31mNetwork error: ${errorMessage}\x1b[0m`)
-    updateStatus('Disconnected', false)
+    writeLine(`\r\n\x1b[31m${errorMessage}\x1b[0m`)
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      updateStatus('Disconnected', false)
+      scheduleReconnect()
+    }
+  } finally {
+    isExecuting = false
+    prompt()
   }
-  isExecuting = false
-  prompt()
 }
 
 terminal.onData(data => {
@@ -424,6 +755,7 @@ async function initTerminal() {
     /** @type {string} */
     const data = await response.text()
     if (data !== 'ok') throw new Error('Connection failed')
+    await connectWebSocket()
     hideLoading()
     updateStatus('Connected', true)
     prompt()
