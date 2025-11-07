@@ -39,5 +39,8 @@
     "**/_/**": true,
     "bun.lock": true,
     "node_modules": true
+  },
+  "files.exclude": {
+    ".wrangler": true
   }
 }

@@ -1,8 +1,10 @@
-export { Sandbox } from '@cloudflare/sandbox'
+import { env } from 'cloudflare:workers'
 import { getSandbox, proxyToSandbox } from '@cloudflare/sandbox'
 
+export { Sandbox } from '@cloudflare/sandbox'
+
 const sessions = new Map<string, string>()
-const COMMAND_WS_PORT = 8080
+const COMMAND_WS_PORT = Number(env.WS_PORT ?? 8080)
 
 export default {
   async fetch(request, env, _context) {
@@ -70,7 +72,6 @@ async function handleExec(
 
     const sandboxId = getOrCreateSandboxId(sessionId)
     const sandbox = getSandbox(env.Sandbox, sandboxId)
-
     // Execute the command
     const result = await sandbox.exec(command, {
       timeout: 25_000, // 25s

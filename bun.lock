@@ -1,14 +1,15 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 1,
   "workspaces": {
     "": {
       "name": "foundry-sandbox",
       "dependencies": {
-        "@cloudflare/sandbox": "^0.4.15",
+        "@cloudflare/sandbox": "^0.4.16",
       },
       "devDependencies": {
         "@biomejs/biome": "^2.3.4",
-        "@cloudflare/workers-types": "^4.20251014.0",
+        "@cloudflare/workers-types": "^4.20251106.1",
         "@total-typescript/ts-reset": "^0.6.1",
         "@types/bun": "^1.3.1",
         "@types/node": "^24.10.0",
@@ -47,7 +48,7 @@
 
     "@cloudflare/kv-asset-handler": ["@cloudflare/kv-asset-handler@0.4.0", "", { "dependencies": { "mime": "^3.0.0" } }, "sha512-+tv3z+SPp+gqTIcImN9o0hqE9xyfQjI1XD9pL6NuKjua9B1y7mNYv0S9cP+QEbA4ppVgGZEmKOvHX5G5Ei1CVA=="],
 
-    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.4.15", "", { "dependencies": { "@cloudflare/containers": "^0.0.30" } }, "sha512-AgvLHimyThav8X4HzI7vWG4ECFFsINHgW5kHlFYoegJEZWbudr0DxJ9lvSJVNM6kMHmvBfiITWjC56JBTgYrgA=="],
+    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.4.16", "", { "dependencies": { "@cloudflare/containers": "^0.0.30" } }, "sha512-geQR3XK7pDlEc+fkIgZrTqwMx9J2y9nT6yIuL2V3cCvTvbZSy3bLAiDY8MKDAOHXwq9t+k60mqbsRMGKQz1JdA=="],
 
     "@cloudflare/unenv-preset": ["@cloudflare/unenv-preset@2.7.9", "", { "peerDependencies": { "unenv": "2.0.0-rc.24", "workerd": "^1.20250927.0" }, "optionalPeers": ["workerd"] }, "sha512-Drm7qlTKnvncEv+DANiQNEonq0H0LyIsoFZYJ6tJ8OhAoy5udIE8yp6BsVDYcIjcYLIybp4M7c/P7ly/56SoHg=="],
 
@@ -61,7 +62,7 @@
 
     "@cloudflare/workerd-windows-64": ["@cloudflare/workerd-windows-64@1.20251105.0", "", { "os": "win32", "cpu": "x64" }, "sha512-6BpkfjBIbGR+4FBOcZGcWDLM0XQuoI6R9Dublj/BKf4pv0/xJ4zHdnaYUb5NIlC75L55Ouqw0CEJasoKlMjgnw=="],
 
-    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20251014.0", "", {}, "sha512-tEW98J/kOa0TdylIUOrLKRdwkUw0rvvYVlo+Ce0mqRH3c8kSoxLzUH9gfCvwLe0M89z1RkzFovSKAW2Nwtyn3w=="],
+    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20251106.1", "", {}, "sha512-+oD+w4K9VYMb1/d3lQ4A7GIV7Im6xpwaCRAXSUSeYKWw5LSQSpai1kJXh7LGIVE9HnJv9gXKpjaMSgcffW4Igw=="],
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 

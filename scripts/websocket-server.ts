@@ -1,191 +1,408 @@
 import { randomUUID } from 'node:crypto'
+import type { ServerWebSocket } from 'bun'
 
-type IncomingMessage = {
-  id?: string
-} & (
-  | {
-      type: 'exec'
-      command: string
-    }
-  | {
-      type: 'ping'
-    }
-)
+const DEFAULT_COLS = 120
+const DEFAULT_ROWS = 32
+const DEFAULT_SHELL = 'bash --noprofile --norc -i'
 
-type ExecResponse = {
-  type: 'execResult'
+const encoder = new TextEncoder()
+const decoder = new TextDecoder()
+
+type BunSubprocess = ReturnType<typeof Bun.spawn>
+
+type WritableSink =
+  | {
+      write?: (chunk: Uint8Array) => any
+      end?: () => any
+    }
+  | undefined
+
+type ShellSession = {
   id: string
-  success: boolean
-  stdout: string
-  stderr: string
-  exitCode: number
+  process: BunSubprocess
+  stdin: WritableSink
+  cols: number
+  rows: number
+  suppressions: Suppression[]
+  close: () => void
 }
 
-const COMMAND_TIMEOUT_MS = 25_000
+type SessionState =
+  | { status: 'idle'; sessionId: string }
+  | { status: 'ready'; sessionId: string; session: ShellSession }
 
-/**
- * Execute a shell command inside the sandbox using Bun.spawn.
- * Returns stdout, stderr, exitCode and success state.
- */
-async function runCommand(command: string): Promise<ExecResponse> {
-  const id = randomUUID()
-  const child = Bun.spawn(['bash', '-lc', command], {
+type ControlMessage =
+  | { type: 'init'; cols?: number; rows?: number; shell?: string }
+  | { type: 'resize'; cols: number; rows: number }
+  | { type: 'ping'; id?: string }
+
+type Suppression = { bytes: Uint8Array; index: number }
+
+function queueSuppression(suppressions: Suppression[], text: string): void {
+  suppressions.push({ bytes: encoder.encode(text), index: 0 })
+}
+
+function stripSuppressed(
+  suppressions: Suppression[],
+  data: Uint8Array,
+): Uint8Array {
+  if (!suppressions.length || !data.length) return data
+  const output: number[] = []
+  let idx = 0
+
+  while (idx < data.length) {
+    if (!suppressions.length) {
+      output.push(data[idx])
+      idx++
+      continue
+    }
+
+    const current = suppressions[0]
+    if (data[idx] === current.bytes[current.index]) {
+      current.index++
+      idx++
+      if (current.index === current.bytes.length) {
+        suppressions.shift()
+      }
+      continue
+    }
+
+    if (current.index > 0) {
+      output.push(...current.bytes.slice(0, current.index))
+      suppressions.shift()
+      continue
+    }
+
+    suppressions.shift()
+  }
+
+  return Uint8Array.from(output)
+}
+
+function removeResizeEcho(data: Uint8Array): Uint8Array {
+  if (!data.length) return data
+  const text = decoder.decode(data)
+  if (!text.includes('stty cols')) return data
+  const cleaned = text.replace(
+    /(?:\r?\n)?(?:[^\r\n]*?#\s*)?stty cols \d+ rows \d+(?:\r?\n)?/g,
+    '',
+  )
+  if (!cleaned.includes('bash-')) return encoder.encode(cleaned)
+  const lines = cleaned.split(/\r?\n/)
+  const promptPattern = /^bash-[^#]+#\s*$/
+  const filtered: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.length === 0) {
+      const last = filtered[filtered.length - 1]
+      if (!last || last.trim().length === 0) continue
+      filtered.push('')
+      continue
+    }
+    if (
+      promptPattern.test(trimmed) &&
+      (filtered.length === 0 ||
+        promptPattern.test(filtered[filtered.length - 1].trim()))
+    ) {
+      continue
+    }
+    filtered.push(line)
+  }
+  const collapsed = filtered.join('\n').replace(/\n{3,}/g, '\n\n')
+  return encoder.encode(collapsed)
+}
+
+function writeInput(session: ShellSession, data: Uint8Array) {
+  try {
+    const sink = session.stdin
+    if (!sink) return
+    const result = sink.write?.(data)
+    if (result instanceof Promise) {
+      result.catch(error => {
+        console.error('[shell] write failed (async)', error)
+      })
+    }
+  } catch (error) {
+    console.error('[shell] write failed', error)
+  }
+}
+
+function applyResize(session: ShellSession, cols: number, rows: number) {
+  session.cols = cols
+  session.rows = rows
+  const commandText = `stty cols ${cols} rows ${rows}`
+  const command = encoder.encode(`${commandText}\r`)
+  writeInput(session, command)
+  queueSuppression(session.suppressions, commandText)
+  queueSuppression(session.suppressions, '\r')
+  queueSuppression(session.suppressions, '\n')
+}
+
+function spawnShell(
+  ws: ServerWebSocket<SessionState>,
+  options: { cols?: number; rows?: number; shell?: string },
+): ShellSession {
+  const cols =
+    typeof options.cols === 'number' && options.cols > 0
+      ? options.cols
+      : DEFAULT_COLS
+  const rows =
+    typeof options.rows === 'number' && options.rows > 0
+      ? options.rows
+      : DEFAULT_ROWS
+
+  const shellCommand =
+    typeof options.shell === 'string' && options.shell.trim().length > 0
+      ? options.shell.trim()
+      : DEFAULT_SHELL
+
+  const sessionId = ws.data?.sessionId ?? randomUUID()
+  console.info(
+    '[shell] starting session',
+    JSON.stringify({ sessionId, cols, rows, shell: shellCommand }),
+  )
+
+  const cmd = ['script', '-qf', '-c', shellCommand, '/dev/null']
+
+  const subprocess = Bun.spawn({
+    cmd,
+    stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'pipe',
-    stdin: 'ignore',
-    env: process.env,
+    env: {
+      ...process.env,
+      PS1: '\u001b[32m$ \u001b[0m',
+      TERM: 'xterm-256color',
+      COLUMNS: String(cols),
+      LINES: String(rows),
+    },
   })
 
-  const timeout = setTimeout(() => {
+  const suppressionQueue: Suppression[] = []
+  const pumps: Array<Promise<void>> = []
+
+  const forwardStream = (
+    stream: ReadableStream<Uint8Array<ArrayBuffer>>,
+  ): Promise<void> => {
+    const reader = stream.getReader()
+    return (async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          if (!value?.byteLength) continue
+          const filtered = removeResizeEcho(
+            stripSuppressed(suppressionQueue, new Uint8Array(value)),
+          )
+          if (!filtered.length) continue
+
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(filtered)
+          } else {
+            break
+          }
+        }
+      } catch (error) {
+        console.error('[shell] stream failure', error)
+      } finally {
+        reader.releaseLock()
+      }
+    })()
+  }
+
+  pumps.push(forwardStream(subprocess.stdout))
+  pumps.push(forwardStream(subprocess.stderr))
+
+  subprocess.exited
+    .then((exitCode: number) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: 'process-exit',
+            exitCode,
+          }),
+        )
+        ws.close(1000, 'process exited')
+      }
+    })
+    .catch((error: unknown) => {
+      console.error('[shell] process exited with error', error)
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1011, 'process failure')
+      }
+    })
+
+  const close = () => {
     try {
-      child.kill()
+      subprocess.kill('SIGTERM')
     } catch (error) {
-      console.warn('Failed to kill timed out process', error)
+      console.warn('[shell] failed to terminate process', error)
     }
-  }, COMMAND_TIMEOUT_MS)
 
-  try {
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ])
-
-    return {
-      type: 'execResult',
-      id,
-      success: exitCode === 0,
-      stdout,
-      stderr,
-      exitCode,
+    const sink = subprocess.stdin as WritableSink
+    try {
+      sink?.end?.()
+    } catch (error) {
+      console.warn('[shell] failed to close stdin', error)
     }
-  } finally {
-    clearTimeout(timeout)
+
+    Promise.allSettled(pumps).catch(() => {
+      /* ignore pump errors on shutdown */
+    })
   }
+
+  const session: ShellSession = {
+    id: sessionId,
+    process: subprocess,
+    stdin: subprocess.stdin as WritableSink,
+    cols,
+    rows,
+    suppressions: suppressionQueue,
+    close,
+  }
+
+  applyResize(session, cols, rows)
+  return session
 }
 
-function toUtf8(message: string | ArrayBuffer | ArrayBufferView): string {
-  if (typeof message === 'string') return message
-  if (message instanceof ArrayBuffer) {
-    return Buffer.from(message).toString('utf8')
-  }
-  return Buffer.from(
-    message.buffer,
-    message.byteOffset,
-    message.byteLength,
-  ).toString('utf8')
-}
-
-function parseMessage(raw: string): IncomingMessage | undefined {
+function parseControlMessage(raw: string): ControlMessage | undefined {
   try {
-    const data = JSON.parse(raw) as IncomingMessage
-    if (data.type === 'exec' && typeof data.command === 'string') return data
-    if (data.type === 'ping') return data
+    const payload = JSON.parse(raw) as ControlMessage
+    if (!payload || typeof payload !== 'object') return undefined
+    if (payload.type === 'init') return payload
+    if (payload.type === 'resize') return payload
+    if (payload.type === 'ping') return payload
   } catch (error) {
-    console.warn('Failed to parse incoming WebSocket message', error)
+    console.warn('[shell] invalid control payload', error)
   }
   return undefined
 }
 
-const server = Bun.serve({
+const PORT = Number(Bun.env.WS_PORT ?? Bun.env.VITE_WS_PORT ?? 8080) || 8080
+
+const server = Bun.serve<SessionState>({
   hostname: '0.0.0.0',
-  port: Number(Bun.env.WS_PORT),
+  port: PORT,
   development: Bun.env.ENVIRONMENT !== 'production',
   fetch: (request, server) => {
-    // upgrade the request to a WebSocket and skip response returning
+    const sessionId =
+      request.headers.get('x-sandbox-session-id') ?? randomUUID().slice(0, 8)
+
     if (
       server.upgrade(request, {
         headers: {
-          'x-sandbox-session-id':
-            request.headers.get('x-sandbox-session-id') || '',
+          'x-sandbox-session-id': sessionId,
+        },
+        data: {
+          status: 'idle',
+          sessionId,
         },
       })
-    )
+    ) {
       return
+    }
 
-    return new Response('Cloudflare Sandbox WebSocket command server')
+    return new Response('Cloudflare Sandbox WebSocket shell server')
   },
   websocket: {
     open: ws => {
-      ws.send(
+      ws.send(JSON.stringify({ type: 'ready' }))
+    },
+    message: (ws, message) => {
+      const state = ws.data
+      if (!state) return
+
+      if (typeof message === 'string') {
+        const payload = parseControlMessage(message)
+        if (!payload) return
+
+        if (payload.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong', id: payload.id }))
+          return
+        }
+
+        if (payload.type === 'init') {
+          if (state.status === 'ready') return
+          const session = spawnShell(ws, {
+            cols: payload.cols,
+            rows: payload.rows,
+            shell: payload.shell,
+          })
+          ws.data = {
+            status: 'ready',
+            sessionId: state.sessionId,
+            session,
+          }
+          return
+        }
+
+        if (payload.type === 'resize') {
+          if (state.status !== 'ready') return
+          applyResize(state.session, payload.cols, payload.rows)
+        }
+
+        return
+      }
+
+      if (state.status !== 'ready') {
+        console.warn('[shell] dropping binary payload before init')
+        return
+      }
+
+      const session = state.session
+      if (message instanceof ArrayBuffer) {
+        writeInput(session, new Uint8Array(message))
+        return
+      }
+
+      if (message instanceof Uint8Array) {
+        writeInput(session, message)
+        return
+      }
+
+      if (ArrayBuffer.isView(message)) {
+        const view = message as ArrayBufferView
+        writeInput(
+          session,
+          new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+        )
+        return
+      }
+
+      console.warn('[shell] unsupported payload type', typeof message)
+    },
+    close: (ws, code, reason) => {
+      const state = ws.data
+      if (state?.status === 'ready') {
+        state.session.close()
+      }
+      console.info(
+        '[shell] websocket closed',
         JSON.stringify({
-          type: 'pong',
+          sessionId: state?.sessionId,
+          code,
+          reason,
         }),
       )
     },
-    message: async (ws, raw) => {
-      const parsed = parseMessage(toUtf8(raw))
-
-      if (!parsed) {
-        ws.send(
-          JSON.stringify({
-            type: 'error',
-            error: 'Invalid payload',
-          }),
-        )
-        return
-      }
-
-      if (parsed.type === 'ping') {
-        ws.send(
-          JSON.stringify({
-            type: 'pong',
-            id: parsed.id,
-          }),
-        )
-        return
-      }
-
-      if (!parsed.command.trim()) {
-        ws.send(
-          JSON.stringify({
-            type: 'error',
-            id: parsed.id,
-            error: 'Missing command',
-          }),
-        )
-        return
-      }
-
-      try {
-        const result = await runCommand(parsed.command)
-        ws.send(
-          JSON.stringify({
-            ...result,
-            id: parsed.id ?? result.id,
-          }),
-        )
-      } catch (error) {
-        console.error(JSON.stringify(error, undefined, 2))
-        const message =
-          error instanceof Error ? error.message : 'Unknown execution failure'
-        ws.send(
-          JSON.stringify({
-            type: 'error',
-            id: parsed.id,
-            error: message,
-          }),
-        )
-      }
-    },
-    close: (_, code, reason) => {
-      console.info('WebSocket closed', code, reason)
-    },
   },
   error: error => {
-    console.error(JSON.stringify(error, undefined, 2))
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error'
-    return new Response(errorMessage, { status: 500 })
+    console.error('[shell] server error', error)
+    const message =
+      error instanceof Error ? error.message : 'Unknown server error'
+    return new Response(message, { status: 500 })
   },
 })
 
-const stopAndExit = () => [server.stop(), process.exit(0)]
+const stopAndExit = () => {
+  server.stop()
+  process.exit(0)
+}
 
-process.on('SIGINT', () => stopAndExit())
-process.on('SIGTERM', () => stopAndExit())
-process.on('SIGQUIT', () => stopAndExit())
+process.on('SIGINT', stopAndExit)
+process.on('SIGTERM', stopAndExit)
+process.on('SIGQUIT', stopAndExit)
 
 console.log(
-  `Sandbox WebSocket server listening on ws://${server.hostname}:${server.port}`,
+  `Sandbox shell WebSocket server listening on ws://${server.hostname}:${server.port}`,
 )
