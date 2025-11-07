@@ -12,7 +12,7 @@ import { LigaturesAddon } from '@xterm/addon-ligatures'
 
 const terminal = new Terminal({
   fontSize: 18,
-  scrollback: 1000,
+  scrollback: 5000,
   convertEol: true,
   cursorBlink: true,
   cursorStyle: 'bar',
@@ -53,6 +53,7 @@ webglAddon.onContextLoss(event => {
 const fitAddon = new FitAddon()
 
 const terminalElement = document.querySelector('div#terminal')
+
 if (!terminalElement) throw new Error('Terminal element not found')
 
 terminal.loadAddon(webglAddon)
@@ -77,49 +78,11 @@ terminal.attachCustomKeyEventHandler(
 const ligaturesAddon = new LigaturesAddon()
 terminal.loadAddon(ligaturesAddon)
 
-const webLinksAddon = new WebLinksAddon(handleLink)
-terminal.loadAddon(webLinksAddon)
-
-/**
- * @param {MouseEvent} event
- * @param {string} url
- */
-function handleLink(event, url) {
+const webLinksAddon = new WebLinksAddon((event, url) => {
   event.preventDefault()
   window.open(url, '_blank', 'noopener,noreferrer')
-}
-
-const fitTerminal = () => fitAddon.fit() ?? void 0
-setTimeout(fitTerminal, 100)
-window.addEventListener('resize', _ => setTimeout(fitTerminal, 50))
-
-/** @type {Array<string>} */
-const commandHistory = []
-let [currentLine, cursorPosition] = ['', 0]
-let [historyIndex, isExecuting] = [-1, false]
-
-const PROMPT = '\x1b[32m$\x1b[0m '
-
-/**
- * @param {{ leadingNewline?: boolean }} [options]
- */
-function prompt(options = {}) {
-  const { leadingNewline = true } = options
-  currentLine = ''
-  cursorPosition = 0
-  if (leadingNewline) terminal.write('\r\n')
-  renderCurrentInput()
-}
-
-function clearTerminal() {
-  terminal.write('\x1b[H\x1b[2J')
-  prompt({ leadingNewline: false })
-}
-
-const sessionId =
-  localStorage.getItem('sessionId') ||
-  `session-${Math.random().toString(36).substring(2, 9)}`
-localStorage.setItem('sessionId', sessionId)
+})
+terminal.loadAddon(webLinksAddon)
 
 const statusText = document.querySelector('p#status-text')
 if (!statusText) throw new Error('Status text element not found')
@@ -130,18 +93,37 @@ if (!loading) throw new Error('Loading element not found')
 const terminalWrapper = document.querySelector('main#terminal-wrapper')
 if (!terminalWrapper) throw new Error('Terminal wrapper element not found')
 
+const encoder = new TextEncoder()
+// const decoder = new TextDecoder()
+
+/** @type {WebSocket | undefined} */
+let socket
+/** @type {Promise<void> | undefined} */
+let connectPromise
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let reconnectTimeout
+/** @type {ReturnType<typeof setInterval> | undefined} */
+let pingInterval
+let consecutiveFailures = 0
+
+const sessionId =
+  localStorage.getItem('sessionId') ||
+  `session-${Math.random().toString(36).substring(2, 9)}`
+localStorage.setItem('sessionId', sessionId)
+
 function showLoading() {
-  if (!loading) return
-  loading.classList.add('active')
+  loading?.classList.add('active')
 }
 
 function hideLoading() {
-  if (!loading) return
-  loading.classList.remove('active')
+  loading?.classList.remove('active')
   if (terminalWrapper) terminalWrapper.style.display = 'block'
 }
 
-/** @param {string} text */
+/**
+ * @param {string} text
+ * @param {boolean} [isConnected=true]
+ */
 function updateStatus(text, isConnected = true) {
   if (!statusText) return
   statusText.textContent = text
@@ -156,293 +138,232 @@ function updateStatus(text, isConnected = true) {
   })
 }
 
-/** @param {string} text */
-function writeToTerminal(text) {
-  if (!terminal) return
-  terminal.write(text)
+const WS_ENDPOINT = '/api/ws'
+const CUSTOM_WS_META_NAME = 'x-ws-url'
+
+function resolveCustomWsUrl() {
+  const globalObj = /** @type {Record<string, unknown>} */ (globalThis)
+  const globalHint =
+    typeof globalObj.__WS_URL === 'string' &&
+    globalObj.__WS_URL.trim().length > 0
+      ? globalObj.__WS_URL.trim()
+      : undefined
+  if (globalHint) return globalHint
+  const meta = document.querySelector(
+    `meta[name="${CUSTOM_WS_META_NAME}"]`,
+  )?.content
+  if (meta && meta.trim().length > 0) return meta.trim()
+  return undefined
 }
 
-/** @param {string} text */
-function writeLine(text) {
-  terminal.writeln(text)
-}
+const RESOLVED_WS_BASE = resolveCustomWsUrl()
 
-function renderCurrentInput() {
-  if (cursorPosition < 0) cursorPosition = 0
-  if (cursorPosition > currentLine.length) cursorPosition = currentLine.length
-  const moveLeft = currentLine.length - cursorPosition
-  let output = `\r\x1b[K${PROMPT}${currentLine}`
-  if (moveLeft > 0) output += `\x1b[${moveLeft}D`
-  terminal.write(output)
-}
-
-function findPreviousWordBoundary() {
-  if (cursorPosition === 0) return 0
-  let index = cursorPosition
-  while (index > 0 && currentLine[index - 1] === ' ') index--
-  while (index > 0 && currentLine[index - 1] !== ' ') index--
-  return index
-}
-
-function findNextWordBoundary() {
-  if (cursorPosition === currentLine.length) return currentLine.length
-  let index = cursorPosition
-  while (index < currentLine.length && currentLine[index] === ' ') index++
-  while (index < currentLine.length && currentLine[index] !== ' ') index++
-  return index
+function websocketUrl() {
+  if (RESOLVED_WS_BASE) {
+    const separator = RESOLVED_WS_BASE.includes('?') ? '&' : '?'
+    return `${RESOLVED_WS_BASE}${separator}sessionId=${encodeURIComponent(sessionId)}`
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const base = `${protocol}://${window.location.host}${WS_ENDPOINT}`
+  return `${base}?sessionId=${encodeURIComponent(sessionId)}`
 }
 
 /**
- * @param {string} text
+ * @param {Record<string, unknown>} payload
  */
-function insertText(text) {
-  if (!text) return
-  currentLine =
-    currentLine.slice(0, cursorPosition) +
-    text +
-    currentLine.slice(cursorPosition)
-  cursorPosition += text.length
-  historyIndex = commandHistory.length
-  renderCurrentInput()
-}
-
-function handleEnter() {
-  writeLine('')
-  historyIndex = commandHistory.length
-  if (currentLine.trim()) {
-    commandHistory.push(currentLine)
-    historyIndex = commandHistory.length
-    executeCommand(currentLine)
-  } else prompt()
-}
-
-/**
- * @param {string} text
- */
-function applyTextInput(text) {
-  if (!text) return
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const segments = normalized.split('\n')
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index]
-    if (segment) insertText(segment)
-    if (index < segments.length - 1) {
-      handleEnter()
-      if (isExecuting) return
-    }
-  }
-}
-
-terminal.attachCustomKeyEventHandler(event => {
-  if (isExecuting) return true
-  if (!event.metaKey || event.altKey || event.ctrlKey) return true
-  const { key, code } = event
-  const targetsLeft =
-    key === 'ArrowLeft' || key === 'Home' || code === 'ArrowLeft'
-  const targetsRight =
-    key === 'ArrowRight' || key === 'End' || code === 'ArrowRight'
-  if (!targetsLeft && !targetsRight) return true
-  event.preventDefault()
-  const targetPosition = targetsLeft ? 0 : currentLine.length
-  if (cursorPosition !== targetPosition) {
-    cursorPosition = targetPosition
-    historyIndex = commandHistory.length
-    renderCurrentInput()
-  }
-  return false
-})
-
-/** @param {string} command */
-async function executeCommand(command) {
-  if (!command.trim()) return prompt()
-  isExecuting = true
-
-  if (command.trim() === 'clear') {
-    clearTerminal()
-    isExecuting = false
-    return
-  }
+function sendJson(payload) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return
   try {
-    const response = await fetch('/api/exec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command, sessionId }),
-    })
-    const data = await response.json()
-    if (data.success) {
-      if (data.stdout) writeToTerminal('\r\n' + data.stdout + '\r\n')
-      if (data.stderr) writeToTerminal('\r\n\x1b[31m' + data.stderr + '\x1b[0m')
-    } else writeLine('\r\n\x1b[31mError executing command\x1b[0m')
+    socket.send(JSON.stringify(payload))
   } catch (error) {
-    console.error(error)
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error'
-    writeLine(`\r\n\x1b[31mNetwork error: ${errorMessage}\x1b[0m`)
-    updateStatus('Disconnected', false)
+    console.error('Failed to send JSON payload', error)
   }
-  isExecuting = false
-  prompt()
+}
+
+/**
+ * @param {Uint8Array} data
+ */
+function sendBinary(data) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return
+  try {
+    socket.send(data)
+  } catch (error) {
+    console.error('Failed to send binary payload', error)
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectTimeout) return
+  reconnectTimeout = setTimeout(() => {
+    reconnectTimeout = undefined
+    connectWebSocket().catch(error => {
+      console.error('WebSocket reconnect failed', error)
+      scheduleReconnect()
+    })
+  }, 1500)
+}
+
+function clearPing() {
+  if (pingInterval) {
+    clearInterval(pingInterval)
+    pingInterval = undefined
+  }
+}
+
+function setupPing() {
+  clearPing()
+  pingInterval = setInterval(() => {
+    sendJson({ type: 'ping' })
+  }, 15000)
+}
+
+/**
+ * @param {number} cols
+ * @param {number} rows
+ */
+function sendResize(cols, rows) {
+  sendJson({ type: 'resize', cols, rows })
+}
+
+function fitTerminal() {
+  fitAddon.fit()
+  const { cols, rows } = terminal
+  sendResize(cols, rows)
+}
+
+async function connectWebSocket() {
+  if (socket && socket.readyState === WebSocket.OPEN) return
+  if (connectPromise) return connectPromise
+
+  updateStatus('Connecting...', false)
+  showLoading()
+
+  connectPromise = /** @type {Promise<void>} */ (
+    new Promise((resolve, reject) => {
+      const ws = new WebSocket(websocketUrl())
+      ws.binaryType = 'arraybuffer'
+
+      let attemptOpened = false
+
+      const handleOpen = () => {
+        attemptOpened = true
+        consecutiveFailures = 0
+        socket = ws
+        hideLoading()
+        updateStatus('Connected', true)
+        const { cols, rows } = terminal
+        sendJson({ type: 'init', cols, rows })
+        setupPing()
+        terminal.focus()
+        resolve()
+      }
+
+      /** @param {MessageEvent} event */
+      const handleMessage = event => {
+        const { data } = event
+        if (data instanceof ArrayBuffer) {
+          terminal.write(new Uint8Array(data))
+          return
+        }
+        if (typeof data !== 'string') return
+
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed && typeof parsed === 'object') {
+            const record = /** @type {Record<string, unknown>} */ (parsed)
+            const payloadType = record.type
+            if (payloadType === 'pong') {
+              updateStatus('Connected', true)
+              return
+            }
+            if (
+              payloadType === 'process-exit' &&
+              typeof record.exitCode === 'number'
+            ) {
+              terminal.writeln(
+                `\r\n\u001b[31mProcess exited with code ${record.exitCode}\u001b[0m`,
+              )
+              return
+            }
+            if (payloadType === 'ready') {
+              return
+            }
+          }
+        } catch {
+          terminal.write(data)
+        }
+      }
+
+      /** @param {CloseEvent} event */
+      const handleClose = event => {
+        if (socket === ws) socket = undefined
+        clearPing()
+        if (attemptOpened) {
+          updateStatus('Disconnected', false)
+          terminal.writeln(
+            `\r\n\u001b[31mConnection closed (code ${event.code}${
+              event.reason ? `, reason: ${event.reason}` : ''
+            })\u001b[0m`,
+          )
+        } else {
+          consecutiveFailures += 1
+          updateStatus('Reconnecting...', false)
+        }
+        scheduleReconnect()
+      }
+
+      /** @param {Event | Error} error */
+      const handleError = error => {
+        consecutiveFailures += 1
+        clearPing()
+        updateStatus('Reconnecting...', false)
+        scheduleReconnect()
+        reject(
+          error instanceof Error
+            ? error
+            : new Error('WebSocket connection error'),
+        )
+      }
+
+      ws.addEventListener('open', handleOpen, { once: true })
+      ws.addEventListener('message', handleMessage)
+      ws.addEventListener('close', handleClose)
+      ws.addEventListener('error', handleError, { once: true })
+    })
+  ).finally(() => {
+    connectPromise = undefined
+  })
+
+  return connectPromise
 }
 
 terminal.onData(data => {
-  if (isExecuting) return
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: _
-  const metaNavigationMatch = data.match(/^\x1b\[[0-9]+;9([CDFH])$/)
-  if (metaNavigationMatch) {
-    const navigationKey = metaNavigationMatch[1]
-    const targetPosition =
-      navigationKey === 'D' || navigationKey === 'H' ? 0 : currentLine.length
-    if (cursorPosition !== targetPosition) {
-      cursorPosition = targetPosition
-      historyIndex = commandHistory.length
-      renderCurrentInput()
-    }
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
     return
   }
-
-  if (data.length > 1 && !data.includes('\x1b') && /[\r\n]/.test(data)) {
-    applyTextInput(data)
-    return
-  }
-
-  const code = data.charCodeAt(0)
-  if (code === 13) {
-    handleEnter()
-    return
-  }
-  if (code === 3) {
-    writeLine('^C')
-    currentLine = ''
-    cursorPosition = 0
-    prompt()
-    return
-  }
-  if (code === 12) {
-    clearTerminal()
-    return
-  }
-  if (data === '\x1b[A') {
-    if (historyIndex > 0) {
-      historyIndex--
-      currentLine = commandHistory[historyIndex]
-      cursorPosition = currentLine.length
-      renderCurrentInput()
-    }
-    return
-  }
-  if (data === '\x1b[B') {
-    if (historyIndex < commandHistory.length - 1) {
-      historyIndex++
-      currentLine = commandHistory[historyIndex]
-      cursorPosition = currentLine.length
-      renderCurrentInput()
-    } else if (historyIndex === commandHistory.length - 1) {
-      historyIndex = commandHistory.length
-      currentLine = ''
-      cursorPosition = 0
-      renderCurrentInput()
-    }
-    return
-  }
-  if (/^[\x20-\x7e]+$/.test(data)) {
-    insertText(data)
-  }
+  sendBinary(encoder.encode(data))
 })
 
-terminal.onKey(({ domEvent }) => {
-  if (isExecuting) return
-  const { key: domKey, altKey, metaKey } = domEvent
-
-  if (domKey === 'Backspace') {
-    domEvent.preventDefault()
-    if (cursorPosition > 0) {
-      currentLine =
-        currentLine.slice(0, cursorPosition - 1) +
-        currentLine.slice(cursorPosition)
-      cursorPosition--
-      historyIndex = commandHistory.length
-      renderCurrentInput()
-    }
-    return
-  }
-
-  if (domKey === 'Delete') {
-    domEvent.preventDefault()
-    if (cursorPosition < currentLine.length) {
-      currentLine =
-        currentLine.slice(0, cursorPosition) +
-        currentLine.slice(cursorPosition + 1)
-      historyIndex = commandHistory.length
-      renderCurrentInput()
-    }
-    return
-  }
-
-  if (domKey === 'ArrowLeft') {
-    domEvent.preventDefault()
-    const originalPosition = cursorPosition
-    if (metaKey) cursorPosition = 0
-    else if (altKey) cursorPosition = findPreviousWordBoundary()
-    else if (cursorPosition > 0) cursorPosition--
-    if (cursorPosition !== originalPosition) renderCurrentInput()
-    return
-  }
-
-  if (domKey === 'ArrowRight') {
-    domEvent.preventDefault()
-    const originalPosition = cursorPosition
-    if (metaKey) cursorPosition = currentLine.length
-    else if (altKey) cursorPosition = findNextWordBoundary()
-    else if (cursorPosition < currentLine.length) cursorPosition++
-    if (cursorPosition !== originalPosition) renderCurrentInput()
-    return
-  }
-
-  if (domKey === 'Home') {
-    domEvent.preventDefault()
-    if (cursorPosition !== 0) {
-      cursorPosition = 0
-      renderCurrentInput()
-    }
-    return
-  }
-
-  if (domKey === 'End') {
-    domEvent.preventDefault()
-    if (cursorPosition !== currentLine.length) {
-      cursorPosition = currentLine.length
-      renderCurrentInput()
-    }
-  }
+window.addEventListener('resize', () => {
+  setTimeout(() => {
+    fitTerminal()
+  }, 50)
 })
 
-async function initTerminal() {
+function initialize() {
   showLoading()
-  updateStatus('Initializing...', false)
-  try {
-    const response = await fetch('/api/ping')
-    /** @type {string} */
-    const data = await response.text()
-    if (data !== 'ok') throw new Error('Connection failed')
-    hideLoading()
-    updateStatus('Connected', true)
-    prompt()
-  } catch (error) {
-    hideLoading()
-    updateStatus('Connection Failed', false)
-    writeLine('Failed to connect to sandbox. Please refresh the page.')
-    writeLine('')
-    writeLine('')
-  }
+  updateStatus('Connecting...', false)
+  setTimeout(() => fitTerminal(), 25)
+  connectWebSocket().catch(error => {
+    console.error(error)
+    if (consecutiveFailures > 3) {
+      hideLoading()
+      updateStatus('Connection Failed', false)
+      terminal.writeln('Failed to connect to sandbox. Please refresh the page.')
+    } else {
+      updateStatus('Reconnecting...', false)
+    }
+  })
 }
 
-initTerminal().catch(error => {
-  console.error(error)
-  hideLoading()
-  updateStatus('Connection Failed', false)
-  writeLine('Failed to connect to sandbox. Please refresh the page.')
-  writeLine(
-    'Please report an issue at https://github.com/o-az/foundry-sandbox/issues',
-  )
-  writeLine('')
-})
+initialize()

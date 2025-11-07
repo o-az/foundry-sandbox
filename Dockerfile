@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM docker.io/cloudflare/sandbox:0.4.15
+FROM docker.io/cloudflare/sandbox:0.4.16
 
 ENV FOUNDRY_DISABLE_NIGHTLY_WARNING=1
 ENV NODE_OPTIONS="npm_config_yes=true"
@@ -10,5 +10,11 @@ RUN npm install --global \
   @foundry-rs/anvil@nightly \
   @foundry-rs/chisel@nightly
 
-# Expose any ports you might want to use (optional)
-# EXPOSE 3000 8080
+COPY scripts/websocket-server.ts websocket-server.ts
+COPY scripts/startup.sh startup.sh
+RUN chmod +x startup.sh
+
+ENV WS_PORT=8080
+
+# Expose the primary shell port (8080) and the legacy 6969 fallback for local dev
+EXPOSE 8080 6969

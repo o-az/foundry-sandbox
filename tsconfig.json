@@ -3,7 +3,9 @@
     "target": "ESNext",
     "module": "Preserve",
     "lib": [
-      "ESNext"
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
     ],
     "types": [
       "bun",
@@ -18,7 +20,6 @@
     "jsx": "react-jsx",
     "allowJs": true,
     "checkJs": true,
-    "jsxImportSource": "mono-jsx",
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
