@@ -104,6 +104,7 @@ localStorage.setItem('sessionId', sessionId)
 const urlParams = new URLSearchParams(window.location.search)
 const prefilledCommand = urlParams.get('cmd')
 const embedMode = urlParams.get('embed') === 'true'
+const autoRun = urlParams.get('autorun') === 'true' // defaults to false
 
 /**
  * @type {WebSocket | undefined}
@@ -140,6 +141,21 @@ window.addEventListener('online', () => {
   if (!interactiveMode) setStatus('online')
 })
 window.addEventListener('offline', () => setStatus('offline'))
+
+// Listen for postMessage from parent window to execute command
+window.addEventListener('message', event => {
+  if (event.data?.type === 'execute') {
+    // Simulate Enter key press to execute the pre-filled command
+    const enterEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+    })
+    terminal.textarea?.dispatchEvent(enterEvent)
+  }
+})
 
 readline.setCtrlCHandler(() => {
   if (interactiveMode || commandInProgress) return
@@ -197,6 +213,20 @@ function startInputLoop() {
         clipboardData: dataTransfer,
       })
       terminal.textarea?.dispatchEvent(pasteEvent)
+
+      // If autorun is enabled, simulate Enter key press
+      if (autoRun) {
+        setTimeout(() => {
+          const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+          })
+          terminal.textarea?.dispatchEvent(enterEvent)
+        }, 100)
+      }
     }, 50)
   }
 }
