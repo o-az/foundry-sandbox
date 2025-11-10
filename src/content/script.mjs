@@ -132,11 +132,10 @@ if (!prefilledCommand) {
 terminal.focus()
 setStatus(navigator.onLine ? 'online' : 'offline')
 
-// Apply embed mode styling if enabled or if there's a pre-filled command
-if (embedMode || prefilledCommand) {
-  const footer = document.querySelector('footer#footer')
-  if (footer) footer.style.display = 'none'
-}
+// Show footer only if NOT in embed mode
+const footer = document.querySelector('footer#footer')
+if (footer && !embedMode) footer.style.display = 'block'
+
 window.addEventListener('online', () => {
   if (!interactiveMode) setStatus('online')
 })
@@ -145,6 +144,9 @@ window.addEventListener('offline', () => setStatus('offline'))
 // Listen for postMessage from parent window to execute command
 window.addEventListener('message', event => {
   if (event.data?.type === 'execute') {
+    // Temporarily enable stdin to allow command execution
+    terminal.options.disableStdin = false
+
     // Simulate Enter key press to execute the pre-filled command
     const enterEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
@@ -154,6 +156,13 @@ window.addEventListener('message', event => {
       bubbles: true,
     })
     terminal.textarea?.dispatchEvent(enterEvent)
+
+    // Re-disable stdin after execution if in embed mode
+    setTimeout(() => {
+      if (embedMode) {
+        terminal.options.disableStdin = true
+      }
+    }, 200)
   }
 })
 
@@ -213,6 +222,11 @@ function startInputLoop() {
         clipboardData: dataTransfer,
       })
       terminal.textarea?.dispatchEvent(pasteEvent)
+
+      // Disable stdin if in embed mode (wait for button click to execute)
+      if (embedMode && !autoRun) {
+        terminal.options.disableStdin = true
+      }
 
       // If autorun is enabled, simulate Enter key press
       if (autoRun) {
@@ -389,9 +403,7 @@ function handleStreamEvent(event) {
     return
   }
 
-  if (type === 'start') {
-    setStatus('online')
-  }
+  if (type === 'start') setStatus('online')
 }
 
 /** @param {Response} response */
@@ -421,9 +433,7 @@ function renderExecResult(result) {
     const message = result.error || 'Command failed'
     displayError(message)
     setStatus('error')
-  } else {
-    setStatus('online')
-  }
+  } else setStatus('online')
   if (typeof result.exitCode === 'number' && result.exitCode !== 0) {
     terminal.writeln(`\r\n[process exited with code ${result.exitCode}]`)
   }

@@ -68,7 +68,7 @@ body {
   font-weight: 400;
 }
 
-/* Hide footer in embed mode */
-#footer[data-embed="true"] {
+/* Hide footer by default to prevent flash */
+#footer {
   display: none;
 }
