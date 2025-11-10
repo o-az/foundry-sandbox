@@ -69,6 +69,7 @@ async function handleExec(
   request: Request,
   env: Cloudflare.Env,
 ): Promise<Response> {
+  let sandbox: SandboxInstance | null = null
   try {
     const { command, sessionId } = await request.json<{
       command: string
@@ -83,7 +84,7 @@ async function handleExec(
     }
 
     const sandboxId = getOrCreateSandboxId(sessionId)
-    const sandbox = getSandbox(env.Sandbox, sandboxId)
+    sandbox = getSandbox(env.Sandbox, sandboxId)
 
     if (shouldStreamCommand(command))
       return await streamExecCommand(command, sandbox)
@@ -111,6 +112,8 @@ async function handleExec(
       },
       { status: 500 },
     )
+  } finally {
+    await sandbox?.destroy()
   }
 }
 
