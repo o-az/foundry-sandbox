@@ -16,7 +16,7 @@ RUN npm install --global \
   @foundry-rs/anvil@nightly \
   @foundry-rs/chisel@nightly
 
-COPY scripts/websocket-server.ts websocket-server.ts
+COPY src/pty-bridge.ts pty-bridge.ts
 COPY scripts/startup.sh startup.sh
 RUN chmod +x startup.sh
 

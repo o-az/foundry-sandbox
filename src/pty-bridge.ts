@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { ServerWebSocket } from 'bun'
 
-const DEFAULT_COLS = 120
-const DEFAULT_ROWS = 32
+const [DEFAULT_COLS, DEFAULT_ROWS] = [120, 32]
 const DEFAULT_SHELL = 'bash --noprofile --norc -i'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
-
-type BunSubprocess = ReturnType<typeof Bun.spawn>
 
 type WritableSink =
   | {
@@ -19,11 +16,11 @@ type WritableSink =
 
 type ShellSession = {
   id: string
-  process: BunSubprocess
-  stdin: WritableSink
   cols: number
   rows: number
-  suppressions: Suppression[]
+  stdin: WritableSink
+  suppressions: Array<Suppression>
+  process: ReturnType<typeof Bun.spawn>
   close: () => void
 }
 
@@ -37,6 +34,120 @@ type ControlMessage =
   | { type: 'ping'; id?: string }
 
 type Suppression = { bytes: Uint8Array; index: number }
+
+const server = Bun.serve<SessionState>({
+  hostname: '0.0.0.0',
+  port: Number(Bun.env.WS_PORT || 8080),
+  development: Bun.env.ENVIRONMENT !== 'production',
+  fetch: (request, server) => {
+    const sessionId =
+      request.headers.get('x-sandbox-session-id') ?? randomUUID().slice(0, 8)
+
+    if (
+      server.upgrade(request, {
+        headers: {
+          'x-sandbox-session-id': sessionId,
+        },
+        data: {
+          status: 'idle',
+          sessionId,
+        },
+      })
+    ) {
+      return
+    }
+
+    return new Response('Cloudflare Sandbox WebSocket shell server')
+  },
+  websocket: {
+    open: ws => {
+      ws.send(JSON.stringify({ type: 'ready' }))
+    },
+    message: (ws, message) => {
+      const state = ws.data
+      if (!state) return
+
+      if (typeof message === 'string') {
+        const payload = parseControlMessage(message)
+        if (!payload) return
+
+        if (payload.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong', id: payload.id }))
+          return
+        }
+
+        if (payload.type === 'init') {
+          if (state.status === 'ready') return
+          const session = spawnShell(ws, {
+            cols: payload.cols,
+            rows: payload.rows,
+            shell: payload.shell,
+          })
+          ws.data = {
+            status: 'ready',
+            sessionId: state.sessionId,
+            session,
+          }
+          return
+        }
+
+        if (payload.type === 'resize') {
+          if (state.status !== 'ready') return
+          applyResize(state.session, payload.cols, payload.rows)
+        }
+
+        return
+      }
+
+      if (state.status !== 'ready') {
+        console.warn('[shell] dropping binary payload before init')
+        return
+      }
+
+      const session = state.session
+      if (message instanceof ArrayBuffer) {
+        writeInput(session, new Uint8Array(message))
+        return
+      }
+
+      if (message instanceof Uint8Array) {
+        writeInput(session, message)
+        return
+      }
+
+      if (ArrayBuffer.isView(message)) {
+        const view = message as ArrayBufferView
+        writeInput(
+          session,
+          new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+        )
+        return
+      }
+
+      console.warn('[shell] unsupported payload type', typeof message)
+    },
+    close: (ws, code, reason) => {
+      const state = ws.data
+      if (state?.status === 'ready') {
+        state.session.close()
+      }
+      console.info(
+        '[shell] websocket closed',
+        JSON.stringify({
+          sessionId: state?.sessionId,
+          code,
+          reason,
+        }),
+      )
+    },
+  },
+  error: error => {
+    console.error('[shell] server error', error)
+    const message =
+      error instanceof Error ? error.message : 'Unknown server error'
+    return new Response(message, { status: 500 })
+  },
+})
 
 function queueSuppression(suppressions: Suppression[], text: string): void {
   suppressions.push({ bytes: encoder.encode(text), index: 0 })
@@ -176,9 +287,10 @@ function spawnShell(
       COLUMNS: String(cols),
       LINES: String(rows),
     },
+    maxBuffer: 1_000_000, // 1MB
   })
 
-  const suppressionQueue: Suppression[] = []
+  const suppressionQueue: Array<Suppression> = []
   const pumps: Array<Promise<void>> = []
 
   const forwardStream = (
@@ -196,11 +308,8 @@ function spawnShell(
           )
           if (!filtered.length) continue
 
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(filtered)
-          } else {
-            break
-          }
+          if (ws.readyState === WebSocket.OPEN) ws.send(filtered)
+          else break
         }
       } catch (error) {
         console.error('[shell] stream failure', error)
@@ -227,9 +336,7 @@ function spawnShell(
     })
     .catch((error: unknown) => {
       console.error('[shell] process exited with error', error)
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close(1011, 'process failure')
-      }
+      if (ws.readyState === WebSocket.OPEN) ws.close(1011, 'process failure')
     })
 
   const close = () => {
@@ -239,7 +346,7 @@ function spawnShell(
       console.warn('[shell] failed to terminate process', error)
     }
 
-    const sink = subprocess.stdin as WritableSink
+    const sink = subprocess.stdin
     try {
       sink?.end?.()
     } catch (error) {
@@ -254,7 +361,7 @@ function spawnShell(
   const session: ShellSession = {
     id: sessionId,
     process: subprocess,
-    stdin: subprocess.stdin as WritableSink,
+    stdin: subprocess.stdin,
     cols,
     rows,
     suppressions: suppressionQueue,
@@ -277,122 +384,6 @@ function parseControlMessage(raw: string): ControlMessage | undefined {
   }
   return undefined
 }
-
-const PORT = Number(Bun.env.WS_PORT ?? Bun.env.VITE_WS_PORT ?? 8080) || 8080
-
-const server = Bun.serve<SessionState>({
-  hostname: '0.0.0.0',
-  port: PORT,
-  development: Bun.env.ENVIRONMENT !== 'production',
-  fetch: (request, server) => {
-    const sessionId =
-      request.headers.get('x-sandbox-session-id') ?? randomUUID().slice(0, 8)
-
-    if (
-      server.upgrade(request, {
-        headers: {
-          'x-sandbox-session-id': sessionId,
-        },
-        data: {
-          status: 'idle',
-          sessionId,
-        },
-      })
-    ) {
-      return
-    }
-
-    return new Response('Cloudflare Sandbox WebSocket shell server')
-  },
-  websocket: {
-    open: ws => {
-      ws.send(JSON.stringify({ type: 'ready' }))
-    },
-    message: (ws, message) => {
-      const state = ws.data
-      if (!state) return
-
-      if (typeof message === 'string') {
-        const payload = parseControlMessage(message)
-        if (!payload) return
-
-        if (payload.type === 'ping') {
-          ws.send(JSON.stringify({ type: 'pong', id: payload.id }))
-          return
-        }
-
-        if (payload.type === 'init') {
-          if (state.status === 'ready') return
-          const session = spawnShell(ws, {
-            cols: payload.cols,
-            rows: payload.rows,
-            shell: payload.shell,
-          })
-          ws.data = {
-            status: 'ready',
-            sessionId: state.sessionId,
-            session,
-          }
-          return
-        }
-
-        if (payload.type === 'resize') {
-          if (state.status !== 'ready') return
-          applyResize(state.session, payload.cols, payload.rows)
-        }
-
-        return
-      }
-
-      if (state.status !== 'ready') {
-        console.warn('[shell] dropping binary payload before init')
-        return
-      }
-
-      const session = state.session
-      if (message instanceof ArrayBuffer) {
-        writeInput(session, new Uint8Array(message))
-        return
-      }
-
-      if (message instanceof Uint8Array) {
-        writeInput(session, message)
-        return
-      }
-
-      if (ArrayBuffer.isView(message)) {
-        const view = message as ArrayBufferView
-        writeInput(
-          session,
-          new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
-        )
-        return
-      }
-
-      console.warn('[shell] unsupported payload type', typeof message)
-    },
-    close: (ws, code, reason) => {
-      const state = ws.data
-      if (state?.status === 'ready') {
-        state.session.close()
-      }
-      console.info(
-        '[shell] websocket closed',
-        JSON.stringify({
-          sessionId: state?.sessionId,
-          code,
-          reason,
-        }),
-      )
-    },
-  },
-  error: error => {
-    console.error('[shell] server error', error)
-    const message =
-      error instanceof Error ? error.message : 'Unknown server error'
-    return new Response(message, { status: 500 })
-  },
-})
 
 const stopAndExit = () => {
   server.stop()
