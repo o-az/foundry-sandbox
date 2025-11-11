@@ -13,7 +13,7 @@ import { LigaturesAddon } from '@xterm/addon-ligatures'
 
 const PROMPT = '\u001b[32m$\u001b[0m '
 const STREAMING_COMMANDS = new Set(['anvil'])
-const INTERACTIVE_COMMANDS = new Set(['chisel'])
+const INTERACTIVE_COMMANDS = new Set(['chisel', 'node'])
 const API_ENDPOINT = '/api/exec'
 const WS_ENDPOINT = '/api/ws'
 const textEncoder = new TextEncoder()
