@@ -5,7 +5,7 @@
     "": {
       "name": "foundry-sandbox",
       "dependencies": {
-        "@cloudflare/sandbox": "^0.4.17",
+        "@cloudflare/sandbox": "^0.4.18",
       },
       "devDependencies": {
         "@biomejs/biome": "^2.3.4",
@@ -49,7 +49,7 @@
 
     "@cloudflare/kv-asset-handler": ["@cloudflare/kv-asset-handler@0.4.0", "", { "dependencies": { "mime": "^3.0.0" } }, "sha512-+tv3z+SPp+gqTIcImN9o0hqE9xyfQjI1XD9pL6NuKjua9B1y7mNYv0S9cP+QEbA4ppVgGZEmKOvHX5G5Ei1CVA=="],
 
-    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.4.17", "", { "dependencies": { "@cloudflare/containers": "^0.0.30" } }, "sha512-uTWnmv6iyeji82WoGZ3H1E2Cu29ao4NEeAlJtwFFEXQ+6wXJju/dSHR+p7uwuaBrDcqP1yoPKcayVV2QIwCcGA=="],
+    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.4.18", "", { "dependencies": { "@cloudflare/containers": "^0.0.30" } }, "sha512-YuPkoDrkSO7WlMCbwvP2BuGcZyljGM3gy3vUludHxMgiWiyi54Fboo/2HcXksOGpYAhzppGkORU5sTi2gRBAPA=="],
 
     "@cloudflare/unenv-preset": ["@cloudflare/unenv-preset@2.7.9", "", { "peerDependencies": { "unenv": "2.0.0-rc.24", "workerd": "^1.20250927.0" }, "optionalPeers": ["workerd"] }, "sha512-Drm7qlTKnvncEv+DANiQNEonq0H0LyIsoFZYJ6tJ8OhAoy5udIE8yp6BsVDYcIjcYLIybp4M7c/P7ly/56SoHg=="],
 

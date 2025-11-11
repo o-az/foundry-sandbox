@@ -30,8 +30,9 @@ const terminal = new Terminal({
   scrollback: 5000,
   convertEol: true,
   cursorBlink: true,
-  cursorStyle: 'bar',
+  cursorStyle: 'underline',
   allowProposedApi: true,
+  cursorInactiveStyle: 'underline',
   rightClickSelectsWord: true,
   drawBoldTextInBrightColors: true,
   fontFamily:

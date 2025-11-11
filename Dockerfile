@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM docker.io/cloudflare/sandbox:0.4.17
+FROM docker.io/cloudflare/sandbox:0.4.18
 
 ENV TERM=xterm-256color
 ENV FOUNDRY_DISABLE_NIGHTLY_WARNING=1
@@ -23,4 +23,4 @@ RUN chmod +x startup.sh
 ENV WS_PORT=8080
 
 # Expose the primary shell port (8080) and the legacy 6969 fallback for local dev
-EXPOSE 8080 6969
+EXPOSE ${WS_PORT} 6969
