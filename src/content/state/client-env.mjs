@@ -1,10 +1,10 @@
 import { UAParser } from 'ua-parser-js'
 
-const uap = new UAParser()
+const parser = new UAParser()
 
 export function getClientEnvironment() {
   return {
-    device: uap.getDevice(),
-    browser: uap.getBrowser(),
+    device: parser.getDevice(),
+    browser: parser.getBrowser(),
   }
 }

@@ -25,7 +25,9 @@ app.post('/api/exec', async context => {
   }>()
 
   const sandboxId = getOrCreateSandboxId(sessionId)
-  const sandbox = getSandbox(context.env.Sandbox, sandboxId)
+  const sandbox = getSandbox(context.env.Sandbox, sandboxId, {
+    keepAlive: true,
+  })
 
   const result = await sandbox.exec(command, {
     timeout: 25_000, // 25s
@@ -34,18 +36,52 @@ app.post('/api/exec', async context => {
   return context.json(result)
 })
 
+app.post('/api/health', async context => {
+  const { sessionId } = (await context.req.json<{ sessionId?: string }>()) ?? {}
+
+  if (!sessionId) {
+    return context.json(
+      { success: false, error: 'Missing sessionId' },
+      { status: 400 },
+    )
+  }
+
+  const sandboxId = getOrCreateSandboxId(sessionId)
+  const sandbox = getSandbox(context.env.Sandbox, sandboxId, {
+    keepAlive: true,
+  })
+
+  try {
+    await sandbox.exec('true', { timeout: 5_000 })
+    return context.json({ success: true })
+  } catch (error) {
+    console.error('Sandbox warmup failed', error)
+    return context.json(
+      { success: false, error: 'Sandbox warmup failed' },
+      { status: 500 },
+    )
+  }
+})
+
 app.on(['GET', 'POST'], '/api/reset', async context => {
   const { sessionId } =
     context.req.method === 'GET'
       ? context.req.query()
       : await context.req.json<{ sessionId: string }>()
 
-  const sandbox = getSandbox(
-    context.env.Sandbox,
-    getOrCreateSandboxId(sessionId),
-  )
-  const result = await sandbox.deleteSession(sessionId)
-  const success = result.success && sessions.delete(sessionId)
+  const sandboxId = getOrCreateSandboxId(sessionId)
+  const sandbox = getSandbox(context.env.Sandbox, sandboxId, {
+    keepAlive: true,
+  })
+
+  let success = false
+  try {
+    await sandbox.destroy()
+    sessions.delete(sessionId)
+    success = true
+  } catch (error) {
+    console.error('Failed to destroy sandbox', error)
+  }
 
   return context.json({
     success,
@@ -61,7 +97,9 @@ app.get('/api/ws', context => {
     return context.json({ error: 'Missing sessionId' }, { status: 400 })
 
   const sandboxId = getOrCreateSandboxId(sessionId)
-  const sandbox = getSandbox(context.env.Sandbox, sandboxId)
+  const sandbox = getSandbox(context.env.Sandbox, sandboxId, {
+    keepAlive: true,
+  })
   return sandbox.wsConnect(context.req.raw, COMMAND_WS_PORT)
 })
 

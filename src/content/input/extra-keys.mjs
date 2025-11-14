@@ -1,4 +1,4 @@
-import { getTerminal, sendVirtualKeyboardInput } from './script.mjs'
+import { getTerminal, sendVirtualKeyboardInput } from '../script.mjs'
 import { KeyboardHandler } from './keyboard.mjs'
 
 const keyboardModifiers = new KeyboardHandler({
@@ -33,7 +33,7 @@ export function extraKeyboardKeys(element, options) {
     ${keyboardModifiers
       .modifierKeys()
       .map(
-        key =>
+        (/** @type {string} */ key) =>
           /* js */ `<button
             class="key"
             type="button"
@@ -134,18 +134,21 @@ function extraKeysToggler() {
   })
   toggler.setAttribute('data-element', 'extra-keys-toggler')
 
-  toggler.addEventListener('click', event => {
-    event.preventDefault()
-    const keyboardContainer = document.querySelector('div.keyboard-container')
-    if (!keyboardContainer) throw new Error('Keyboard container not found')
+  toggler.addEventListener(
+    'click',
+    /** @param {MouseEvent} event */ event => {
+      event.preventDefault()
+      const keyboardContainer = document.querySelector('div.keyboard-container')
+      if (!keyboardContainer) throw new Error('Keyboard container not found')
 
-    const hidden = keyboardContainer.dataset.hidden === 'true'
+      const hidden = keyboardContainer.dataset.hidden === 'true'
 
-    Object.assign(keyboardContainer.dataset, { hidden: !hidden })
-    Object.assign(toggler, {
-      textContent: hidden ? 'Hide Extra Keys' : 'Show Extra Keys',
-    })
-  })
+      Object.assign(keyboardContainer.dataset, { hidden: !hidden })
+      Object.assign(toggler, {
+        textContent: hidden ? 'Hide Extra Keys' : 'Show Extra Keys',
+      })
+    },
+  )
 
   return toggler
 }
