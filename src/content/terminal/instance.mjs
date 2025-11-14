@@ -121,6 +121,7 @@ export function initTerminal({ onAltNavigation } = {}) {
   terminal.loadAddon(searchAddon)
   terminal.loadAddon(clipboardAddon)
   terminal.loadAddon(unicode11Addon)
+  terminal.unicode.activeVersion = '11'
   terminal.loadAddon(serializeAddon)
   terminal.loadAddon(ligaturesAddon)
   terminal.loadAddon(webLinksAddon)
@@ -142,7 +143,7 @@ export function initTerminal({ onAltNavigation } = {}) {
     return true
   })
 
-  setTimeout(() => fitAddon.fit(), 25)
+  scheduleInitialFit()
   initialized = true
   return terminal
 }
@@ -188,10 +189,16 @@ export function disposeTerminal() {
     terminal.dispose()
   } finally {
     for (const addon of disposables) {
-      if (typeof addon.dispose === 'function') {
-        addon.dispose()
-      }
+      if (typeof addon.dispose === 'function') addon.dispose()
     }
   }
   initialized = false
+}
+
+function scheduleInitialFit() {
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    document.fonts.ready.then(() => fitAddon.fit()).catch(() => fitAddon.fit())
+    return
+  }
+  setTimeout(() => fitAddon.fit(), 25)
 }

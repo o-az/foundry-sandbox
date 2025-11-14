@@ -14,7 +14,6 @@ const textDecoder = new TextDecoder()
 /**
  * @typedef {Object} InteractiveSessionAPI
  * @property {(command: string) => Promise<void>} startInteractiveSession
- * @property {(key: string, domEvent: KeyboardEvent) => void} sendInteractiveKey
  * @property {(data: string) => void} sendInteractiveInput
  * @property {(options: { cols: number, rows: number }) => void} notifyResize
  * @property {() => boolean} isInteractiveMode
@@ -143,53 +142,6 @@ export function createInteractiveSession({
   }
 
   /**
-   * Handles keyboard events in interactive mode.
-   * @param {string} key
-   * @param {KeyboardEvent} domEvent
-   * @returns {void}
-   */
-  function sendInteractiveKey(key, domEvent) {
-    if (!interactiveSocket || interactiveSocket.readyState !== WebSocket.OPEN) {
-      return
-    }
-
-    if (domEvent.ctrlKey && domEvent.key.toLowerCase() === 'c') {
-      sendInteractiveInput('\u0003')
-      return
-    }
-
-    switch (domEvent.key) {
-      case 'Enter':
-        sendInteractiveInput('\r')
-        return
-      case 'Backspace':
-        sendInteractiveInput('\u0008')
-        return
-      case 'Tab':
-        sendInteractiveInput('\t')
-        return
-      case 'ArrowUp':
-        sendInteractiveInput('\u001b[A')
-        return
-      case 'ArrowDown':
-        sendInteractiveInput('\u001b[B')
-        return
-      case 'ArrowLeft':
-        sendInteractiveInput('\u001b[D')
-        return
-      case 'ArrowRight':
-        sendInteractiveInput('\u001b[C')
-        return
-      default:
-        break
-    }
-
-    if (key.length === 1 && !domEvent.metaKey) {
-      sendInteractiveInput(key)
-    }
-  }
-
-  /**
    * @param {import('../terminal/status.mjs').StatusMode} mode
    * @returns {void}
    */
@@ -261,7 +213,6 @@ export function createInteractiveSession({
 
   return {
     startInteractiveSession,
-    sendInteractiveKey,
     sendInteractiveInput,
     notifyResize,
     isInteractiveMode,

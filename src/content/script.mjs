@@ -61,7 +61,6 @@ const { runCommand } = createCommandRunner({
 
 const {
   startInteractiveSession,
-  sendInteractiveKey,
   sendInteractiveInput,
   notifyResize,
   isInteractiveMode,
@@ -83,15 +82,9 @@ const { sendVirtualKeyboardInput, handleAltNavigation } =
   })
 altNavigationDelegate = handleAltNavigation
 
-const interactiveTextarea = /** @type {HTMLTextAreaElement | null} */ (
-  terminal.textarea
-)
-interactiveTextarea?.addEventListener('paste', event => {
+const interactiveDataListener = terminal.onData(data => {
   if (!isInteractiveMode()) return
-  const text = event.clipboardData?.getData('text')
-  if (!text) return
-  event.preventDefault()
-  sendInteractiveInput(text)
+  sendInteractiveInput(data)
 })
 
 xtermReadline.setCtrlCHandler(() => {
@@ -99,13 +92,6 @@ xtermReadline.setCtrlCHandler(() => {
   xtermReadline.println('^C')
   setStatus('online')
   startInputLoop()
-})
-
-terminal.onKey(event => {
-  if (event.domEvent.defaultPrevented) return
-  if (!isInteractiveMode()) return
-  event.domEvent.preventDefault()
-  sendInteractiveKey(event.key, event.domEvent)
 })
 
 window.addEventListener('online', () => {
@@ -132,14 +118,19 @@ window.addEventListener('message', event => {
   }
 })
 
+/** @type {number | undefined} */
+let resizeRaf
 window.addEventListener('resize', () => {
-  if (!document.hidden) {
+  if (document.hidden) return
+  if (resizeRaf) return
+  resizeRaf = window.requestAnimationFrame(() => {
+    resizeRaf = undefined
     fitAddon.fit()
     notifyResize({
       cols: terminal.cols,
       rows: terminal.rows,
     })
-  }
+  })
 })
 
 // Tear down the sandbox when the page is closed to avoid idle containers.
@@ -148,6 +139,7 @@ function teardownSandbox() {
   if (teardownScheduled) return
   teardownScheduled = true
   stopWarmup?.()
+  interactiveDataListener.dispose()
   disposeTerminal()
   const body = JSON.stringify({ sessionId })
   if (navigator.sendBeacon) {

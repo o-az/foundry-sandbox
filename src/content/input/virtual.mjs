@@ -13,6 +13,12 @@ const ALT_ARROW_SEQUENCES = {
   ArrowRight: '\u001b[1;3C',
 }
 
+const READLINE_ALT_SEQUENCES = /** @type {const} */ ({
+  ArrowUp: '\u0001', // move to start of line
+  ArrowDown: '\u0005', // move to end of line
+  Backspace: '\u001b\u007f',
+})
+
 /**
  * @param {VirtualKeyboardBridgeOptions} options
  * @returns {{ sendVirtualKeyboardInput: (payload: VirtualKeyPayload) => void, handleAltNavigation: (event: KeyboardEvent) => boolean }}
@@ -146,100 +152,22 @@ export function createVirtualKeyboardBridge({
     domEvent.preventDefault()
     domEvent.stopPropagation()
 
-    switch (domEvent.key) {
-      case 'ArrowLeft':
-        moveCursorByWord('left', xtermReadline)
-        return true
-      case 'ArrowRight':
-        moveCursorByWord('right', xtermReadline)
-        return true
-      case 'ArrowUp':
-        moveCursorToBoundary('home', xtermReadline)
-        return true
-      case 'ArrowDown':
-        moveCursorToBoundary('end', xtermReadline)
-        return true
-      case 'Backspace':
-        // @ts-expect-error
-        xtermReadline.readData('\u001b\u007f')
-        return true
-      default:
-        return false
+    if (handleReadlineAltKey(domEvent.key, xtermReadline)) {
+      return true
     }
+    if (isReadlineAltKey(domEvent.key)) {
+      const sequence = READLINE_ALT_SEQUENCES[domEvent.key]
+      const internalReadline = /** @type {any} */ (xtermReadline)
+      internalReadline.readData(sequence)
+      return true
+    }
+    return false
   }
 
   return {
     sendVirtualKeyboardInput,
     handleAltNavigation,
   }
-}
-
-/**
- * @param {'left' | 'right'} direction
- * @param {import('xterm-readline').Readline} xtermReadline
- * @returns {void}
- */
-function moveCursorByWord(direction, xtermReadline) {
-  const state = /** @type {any} */ (xtermReadline).state
-  if (!state?.line) return
-  const buffer = state.line.buffer()
-  const current = state.line.pos ?? buffer.length
-  if (direction === 'left') {
-    const target = findWordBoundaryLeft(buffer, current)
-    if (target === current) return
-    state.line.set_pos(target)
-    state.moveCursor()
-    return
-  }
-  if (direction === 'right') {
-    const target = findWordBoundaryRight(buffer, current)
-    if (target === current) return
-    state.line.set_pos(target)
-    state.moveCursor()
-  }
-}
-
-/**
- * @param {'home' | 'end'} direction
- * @param {import('xterm-readline').Readline} xtermReadline
- * @returns {void}
- */
-function moveCursorToBoundary(direction, xtermReadline) {
-  const state = /** @type {any} */ (xtermReadline).state
-  if (!state) return
-  if (direction === 'home') {
-    state.moveCursorHome()
-  } else if (direction === 'end') {
-    state.moveCursorEnd()
-  }
-}
-
-/**
- * @param {string} buffer
- * @param {number} index
- * @returns {number}
- */
-function findWordBoundaryLeft(buffer, index) {
-  let idx = Math.max(0, index)
-  if (idx === 0) return 0
-  idx--
-  while (idx > 0 && /\s/.test(buffer[idx])) idx--
-  while (idx > 0 && !/\s/.test(buffer[idx - 1])) idx--
-  return idx
-}
-
-/**
- * @param {string} buffer
- * @param {number} index
- * @returns {number}
- */
-function findWordBoundaryRight(buffer, index) {
-  const len = buffer.length
-  let idx = Math.max(0, index)
-  if (idx >= len) return len
-  while (idx < len && /\s/.test(buffer[idx])) idx++
-  while (idx < len && !/\s/.test(buffer[idx])) idx++
-  return idx
 }
 
 /**
@@ -276,4 +204,85 @@ function controlCharacterForKey(rawKey) {
  */
 function isAltArrowKey(key) {
   return key in ALT_ARROW_SEQUENCES
+}
+
+/**
+ * @param {string} key
+ * @returns {key is keyof typeof READLINE_ALT_SEQUENCES}
+ */
+function isReadlineAltKey(key) {
+  return key in READLINE_ALT_SEQUENCES
+}
+
+/**
+ * Attempts to move the readline cursor by word boundaries using internal APIs.
+ * xterm-readline does not expose this publicly, so we guard accesses carefully.
+ * @param {string} key
+ * @param {import('xterm-readline').Readline} readline
+ * @returns {boolean}
+ */
+function handleReadlineAltKey(key, readline) {
+  if (key !== 'ArrowLeft' && key !== 'ArrowRight') return false
+  const internal = /** @type {any} */ (readline)
+  const state = internal?.state
+  const line = state?.line
+  const buffer = typeof line?.buffer === 'function' ? line.buffer() : ''
+  if (
+    !line ||
+    typeof line.set_pos !== 'function' ||
+    typeof state?.moveCursor !== 'function'
+  ) {
+    return false
+  }
+  const current =
+    typeof line.pos === 'number'
+      ? line.pos
+      : typeof buffer.length === 'number'
+        ? buffer.length
+        : 0
+  if (key === 'ArrowLeft') {
+    const target = findWordBoundaryLeft(buffer, current)
+    if (target === current) return true
+    line.set_pos(target)
+    state.moveCursor()
+    return true
+  }
+  if (key === 'ArrowRight') {
+    const target = findWordBoundaryRight(buffer, current)
+    if (target === current) return true
+    line.set_pos(target)
+    state.moveCursor()
+    return true
+  }
+  return false
+}
+
+/**
+ * @param {string} buffer
+ * @param {number} index
+ * @returns {number}
+ */
+function findWordBoundaryLeft(buffer, index) {
+  if (typeof buffer !== 'string') return 0
+  let idx = Math.max(0, index)
+  if (idx === 0) return 0
+  idx--
+  while (idx > 0 && /\s/.test(buffer[idx])) idx--
+  while (idx > 0 && !/\s/.test(buffer[idx - 1])) idx--
+  return idx
+}
+
+/**
+ * @param {string} buffer
+ * @param {number} index
+ * @returns {number}
+ */
+function findWordBoundaryRight(buffer, index) {
+  if (typeof buffer !== 'string') return 0
+  const len = buffer.length
+  let idx = Math.max(0, index)
+  if (idx >= len) return len
+  while (idx < len && /\s/.test(buffer[idx])) idx++
+  while (idx < len && !/\s/.test(buffer[idx])) idx++
+  return idx
 }

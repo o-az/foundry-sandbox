@@ -20,7 +20,6 @@ const textDecoder = new TextDecoder()
 export function createCommandRunner({
   sessionId,
   terminal,
-  serializeAddon,
   setStatus,
   displayError,
   streamingCommands = STREAMING_COMMANDS,
@@ -115,16 +114,12 @@ export function createCommandRunner({
     if (!type) return
 
     if (type === 'stdout' && typeof event.data === 'string') {
-      terminal.write(event.data, () => {
-        console.info(serializeAddon.serialize())
-      })
+      terminal.write(event.data)
       return
     }
 
     if (type === 'stderr' && typeof event.data === 'string') {
-      terminal.write(`\u001b[31m${event.data}\u001b[0m`, () => {
-        console.info(serializeAddon.serialize())
-      })
+      terminal.write(`\u001b[31m${event.data}\u001b[0m`)
       return
     }
 
@@ -168,9 +163,7 @@ export function createCommandRunner({
    */
   function renderExecResult(result) {
     if (result.stdout) {
-      terminal.write(result.stdout, () => {
-        console.info(serializeAddon.serialize())
-      })
+      terminal.write(result.stdout)
       if (!result.stdout.endsWith('\n')) terminal.write('\r\n')
     }
     if (result.stderr) displayError(result.stderr)
