@@ -1,4 +1,4 @@
-import { WS_ENDPOINT, sessionId } from '../state/session.mjs'
+import { LOG_LEVEL, WS_ENDPOINT, sessionId } from '../state/session.mjs'
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
@@ -38,6 +38,8 @@ export function createInteractiveSession({
   let interactiveResolve
   /** @type {((reason?: any) => void) | undefined} */
   let interactiveReject
+  /** @type {import('@xterm/xterm').IDisposable | undefined} */
+  let dataListener
 
   /**
    * @param {string} command
@@ -56,6 +58,11 @@ export function createInteractiveSession({
     interactiveInitQueued = command.endsWith('\n') ? command : `${command}\n`
     setStatus('interactive')
     terminal.writeln('\r\n\u001b[90mOpening interactive shell...\u001b[0m')
+
+    // Attach data listener for this interactive session
+    dataListener = terminal.onData(data => {
+      if (interactiveMode) sendInteractiveInput(data)
+    })
 
     return new Promise((resolve, reject) => {
       interactiveResolve = resolve
@@ -115,7 +122,7 @@ export function createInteractiveSession({
         }
       } catch {
         terminal.write(data, () => {
-          console.info(serializeAddon.serialize())
+          if (LOG_LEVEL === 'debug') console.info(serializeAddon.serialize())
         })
       }
       return
@@ -125,7 +132,7 @@ export function createInteractiveSession({
       const text = textDecoder.decode(new Uint8Array(data))
       if (text) {
         terminal.write(text, () => {
-          console.info(serializeAddon.serialize())
+          if (LOG_LEVEL === 'debug') console.info(serializeAddon.serialize())
         })
       }
       return
@@ -135,7 +142,7 @@ export function createInteractiveSession({
       const text = textDecoder.decode(data)
       if (text) {
         terminal.write(text, () => {
-          console.info(serializeAddon.serialize())
+          if (LOG_LEVEL === 'debug') console.info(serializeAddon.serialize())
         })
       }
     }
@@ -152,6 +159,13 @@ export function createInteractiveSession({
     interactiveSocket = undefined
     interactiveMode = false
     interactiveInitQueued = ''
+
+    // Dispose data listener
+    if (dataListener) {
+      dataListener.dispose()
+      dataListener = undefined
+    }
+
     setStatus(mode)
     if (mode === 'error') {
       interactiveReject?.(new Error('Interactive session ended with error'))

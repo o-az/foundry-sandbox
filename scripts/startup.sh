@@ -6,7 +6,7 @@ set -euo pipefail
 export WS_PORT
 
 echo "[startup] launching WebSocket command server on port ${WS_PORT}..."
-bun ./pty-bridge.ts &
+bun ./websocket.ts &
 
 echo "[startup] starting Cloudflare Sandbox control plane..."
 

@@ -5,7 +5,14 @@ export { Sandbox } from '@cloudflare/sandbox'
 
 import { app } from '#setup.ts'
 
-const sessions = new Map<string, string>()
+// Track active tabs per session
+interface SessionInfo {
+  sandboxId: string
+  activeTabs: Set<string>
+  lastActivity: number
+}
+
+const sessions = new Map<string, SessionInfo>()
 const COMMAND_WS_PORT = Number(env.WS_PORT || 80_80)
 
 app.get('/ping', context => context.text('ok'))
@@ -14,7 +21,7 @@ app.get('/api/ping', context => context.text('ok'))
 
 app.get('/', context => context.env.Web.fetch(context.req.raw))
 
-app.get('/.well-known', context =>
+app.get('/.well-known*', context =>
   context.redirect('https://h0n0.evm.workers.dev/cat'),
 )
 
@@ -37,7 +44,10 @@ app.post('/api/exec', async context => {
 })
 
 app.post('/api/health', async context => {
-  const { sessionId } = (await context.req.json<{ sessionId?: string }>()) ?? {}
+  const { sessionId, tabId } = await context.req.json<{
+    sessionId?: string
+    tabId?: string
+  }>()
 
   if (!sessionId) {
     return context.json(
@@ -46,14 +56,18 @@ app.post('/api/health', async context => {
     )
   }
 
-  const sandboxId = getOrCreateSandboxId(sessionId)
+  const sandboxId = getOrCreateSandboxId(sessionId, tabId)
   const sandbox = getSandbox(context.env.Sandbox, sandboxId, {
     keepAlive: true,
   })
 
   try {
     await sandbox.exec('true', { timeout: 5_000 })
-    return context.json({ success: true })
+    const sessionInfo = sessions.get(sessionId)
+    return context.json({
+      success: true,
+      activeTabs: sessionInfo?.activeTabs.size || 0,
+    })
   } catch (error) {
     console.error('Sandbox warmup failed', error)
     return context.json(
@@ -64,28 +78,52 @@ app.post('/api/health', async context => {
 })
 
 app.on(['GET', 'POST'], '/api/reset', async context => {
-  const { sessionId } =
+  const { sessionId, tabId } =
     context.req.method === 'GET'
       ? context.req.query()
-      : await context.req.json<{ sessionId: string }>()
+      : await context.req.json<{ sessionId: string; tabId?: string }>()
 
-  const sandboxId = getOrCreateSandboxId(sessionId)
-  const sandbox = getSandbox(context.env.Sandbox, sandboxId, {
-    keepAlive: true,
-  })
+  const sessionInfo = sessions.get(sessionId)
 
-  let success = false
-  try {
-    await sandbox.destroy()
-    sessions.delete(sessionId)
-    success = true
-  } catch (error) {
-    console.error('Failed to destroy sandbox', error)
+  if (!sessionInfo) {
+    return context.json({
+      success: true,
+      message: 'Session already destroyed',
+    })
   }
 
+  // Remove this tab from active tabs
+  if (tabId) sessionInfo.activeTabs.delete(tabId)
+
+  // Only destroy if no tabs remain active
+  if (sessionInfo.activeTabs.size === 0) {
+    const sandbox = getSandbox(context.env.Sandbox, sessionInfo.sandboxId, {
+      keepAlive: true,
+    })
+
+    let success = false
+    try {
+      await sandbox.destroy()
+      sessions.delete(sessionId)
+      success = true
+      console.log(`Destroyed sandbox for session ${sessionId}`)
+    } catch (error) {
+      console.error('Failed to destroy sandbox', error)
+    }
+
+    return context.json({
+      success,
+      message: success
+        ? 'Sandbox destroyed (last tab closed)'
+        : 'Failed to destroy sandbox',
+    })
+  }
+
+  // Still have active tabs
   return context.json({
-    success,
-    message: success ? 'Sandbox reset successfully' : 'Failed to reset sandbox',
+    success: true,
+    message: `Sandbox kept alive (${sessionInfo.activeTabs.size} tabs remaining)`,
+    activeTabs: sessionInfo.activeTabs.size,
   })
 })
 
@@ -126,10 +164,24 @@ export default {
   },
 } satisfies ExportedHandler<Cloudflare.Env>
 
-function getOrCreateSandboxId(sessionId: string): string {
-  const existing = sessions.get(sessionId)
-  if (existing) return existing
-  const sandboxId = `sandbox-${sessionId}`
-  sessions.set(sessionId, sandboxId)
-  return sandboxId
+function getOrCreateSandboxId(sessionId: string, tabId?: string): string {
+  let sessionInfo = sessions.get(sessionId)
+
+  if (!sessionInfo) {
+    // Create new session
+    const sandboxId = `sandbox-${sessionId}`
+    sessionInfo = {
+      sandboxId,
+      activeTabs: new Set(tabId ? [tabId] : []),
+      lastActivity: Date.now(),
+    }
+    sessions.set(sessionId, sessionInfo)
+    return sandboxId
+  }
+
+  // Update existing session
+  if (tabId) sessionInfo.activeTabs.add(tabId)
+  sessionInfo.lastActivity = Date.now()
+
+  return sessionInfo.sandboxId
 }

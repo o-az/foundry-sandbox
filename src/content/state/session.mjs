@@ -1,36 +1,41 @@
-/**
- * @typedef {Set<string>} CommandSet
- */
-
-/** @type {CommandSet} */
 const STREAMING_COMMANDS = new Set(['anvil'])
-/** @type {CommandSet} */
 const INTERACTIVE_COMMANDS = new Set(['chisel', 'node'])
-/** @type {string} */
-const API_ENDPOINT = '/api/exec'
-/** @type {string} */
-const WS_ENDPOINT = '/api/ws'
 
-/** @type {string} */
+const WS_ENDPOINT = '/api/ws'
+const API_ENDPOINT = '/api/exec'
+
+// Persistent session ID across refreshes (localStorage survives until cleared)
 const sessionId =
   localStorage.getItem('sessionId') ||
   `session-${Math.random().toString(36).slice(2, 9)}`
 localStorage.setItem('sessionId', sessionId)
 
+// Tab ID survives refresh but not tab close (sessionStorage clears on tab close)
+const tabId =
+  sessionStorage.getItem('tabId') ||
+  `tab-${Math.random().toString(36).slice(2, 9)}`
+sessionStorage.setItem('tabId', tabId)
+
+// Check if this is a new session (first load) or continuation (refresh)
+const isNewSession = !sessionStorage.getItem('sessionActive')
+sessionStorage.setItem('sessionActive', 'true')
+
 const params = new URLSearchParams(window.location.search)
-/** @type {string | null} */
 const prefilledCommand = params.get('cmd')
-/** @type {boolean} */
 const embedMode = params.get('embed') === 'true'
-/** @type {boolean} */
 const autoRun = params.get('autorun') === 'true'
 
+const LOG_LEVEL = params.get('log') === 'debug' ? 'debug' : 'info'
+
 export {
+  LOG_LEVEL,
   API_ENDPOINT,
   WS_ENDPOINT,
   STREAMING_COMMANDS,
   INTERACTIVE_COMMANDS,
   sessionId,
+  tabId,
+  isNewSession,
   prefilledCommand,
   embedMode,
   autoRun,

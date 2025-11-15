@@ -9,45 +9,52 @@ export const STATUS_STYLE = /** @type {const} */ ({
   offline: { text: 'Offline', color: '#fbbf24' },
 })
 
-/** @type {HTMLParagraphElement | null} */
-let statusElement
-/** @type {StatusMode} */
-let currentStatus = 'offline'
-
 /**
- * Registers the DOM element used to display connection status.
- * @param {HTMLParagraphElement | null} element
- * @returns {void}
+ * Manages the status indicator element and its state.
  */
-export function initStatusIndicator(element) {
-  statusElement = element ?? null
-}
+export class StatusIndicator {
+  /** @type {HTMLParagraphElement | null} */
+  #element
 
-/**
- * @param {StatusMode} mode
- * @returns {void}
- */
-export function setStatus(mode) {
-  if (currentStatus === mode) return
-  currentStatus = mode
-  if (!statusElement) return
+  /** @type {StatusMode} */
+  #currentStatus = 'offline'
 
-  const style = /** @type {(typeof STATUS_STYLE)[StatusMode]} */ (
-    STATUS_STYLE[mode] ?? STATUS_STYLE.online
-  )
-  statusElement.style.top = '6px'
-  statusElement.style.right = '6px'
-  statusElement.style.zIndex = '1000'
-  statusElement.style.fontSize = '14px'
-  statusElement.textContent = style.text
-  statusElement.style.color = style.color
-  statusElement.style.position = 'absolute'
-  statusElement.style.letterSpacing = '0.05em'
-}
+  /**
+   * @param {HTMLParagraphElement | null} element
+   */
+  constructor(element) {
+    this.#element = element ?? null
+  }
 
-/**
- * @returns {StatusMode}
- */
-export function getCurrentStatus() {
-  return currentStatus
+  /**
+   * @param {StatusMode} mode
+   * @returns {void}
+   */
+  setStatus(mode) {
+    if (this.#currentStatus === mode) return
+    this.#currentStatus = mode
+    if (!this.#element) return
+
+    const style = /** @type {(typeof STATUS_STYLE)[StatusMode]} */ (
+      STATUS_STYLE[mode] ?? STATUS_STYLE.online
+    )
+
+    this.#element.textContent = style.text
+    Object.assign(this.#element.style, {
+      top: '6px',
+      right: '6px',
+      zIndex: '1000',
+      fontSize: '14px',
+      color: style.color,
+      position: 'absolute',
+      letterSpacing: '0.05em',
+    })
+  }
+
+  /**
+   * @returns {StatusMode}
+   */
+  getCurrentStatus() {
+    return this.#currentStatus
+  }
 }

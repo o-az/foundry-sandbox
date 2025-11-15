@@ -1,14 +1,9 @@
-import {
-  getTerminal,
-  getReadline,
-  getFitAddon,
-  initTerminal,
-  getSerializeAddon,
-  disposeTerminal,
-} from './terminal/instance.mjs'
+import { TerminalManager } from './terminal/instance.mjs'
+import { StatusIndicator } from './terminal/status.mjs'
 import {
   autoRun,
   sessionId,
+  tabId,
   embedMode,
   prefilledCommand,
   INTERACTIVE_COMMANDS,
@@ -17,9 +12,8 @@ import { startSandboxWarmup } from './state/warmup.mjs'
 import { createCommandRunner } from './commands/runner.mjs'
 import { createVirtualKeyboardBridge } from './input/virtual.mjs'
 import { createInteractiveSession } from './interactive/session.mjs'
-import { initStatusIndicator, setStatus } from './terminal/status.mjs'
 
-const PROMPT = '\u001b[32m$\u001b[0m '
+const PROMPT = ' \u001b[32m$\u001b[0m '
 const LOCAL_COMMANDS = new Set(['clear'])
 
 let awaitingInput = false
@@ -29,33 +23,37 @@ let hasPrefilledCommand = false
 /** @type {(event: KeyboardEvent) => boolean} */
 let altNavigationDelegate = () => false
 
-initTerminal({
+const terminalManager = new TerminalManager()
+const terminalElement = document.querySelector('div#terminal')
+if (!terminalElement) throw new Error('Terminal element not found')
+
+terminalManager.init(terminalElement, {
   onAltNavigation: event => altNavigationDelegate(event),
 })
 
-const terminal = getTerminal()
-const fitAddon = getFitAddon()
-const xtermReadline = getReadline()
-const serializeAddon = getSerializeAddon()
+const terminal = terminalManager.terminal
+const fitAddon = terminalManager.fitAddon
+const xtermReadline = terminalManager.readline
+const serializeAddon = terminalManager.serializeAddon
 
 const statusText = document.querySelector('p#status-text')
-if (statusText) initStatusIndicator(statusText)
+const statusIndicator = new StatusIndicator(statusText)
 
 terminal.writeln('\n')
 terminal.focus()
-setStatus(navigator.onLine ? 'online' : 'offline')
+statusIndicator.setStatus(navigator.onLine ? 'online' : 'offline')
 
 const footer = document.querySelector('footer#footer')
 if (footer && !embedMode) footer.classList.add('footer')
 else footer?.classList.remove('footer')
 
-const stopWarmup = startSandboxWarmup({ sessionId })
+const stopWarmup = startSandboxWarmup({ sessionId, tabId })
 
 const { runCommand } = createCommandRunner({
   sessionId,
   terminal,
   serializeAddon,
-  setStatus,
+  setStatus: mode => statusIndicator.setStatus(mode),
   displayError,
 })
 
@@ -67,7 +65,7 @@ const {
 } = createInteractiveSession({
   terminal,
   serializeAddon,
-  setStatus,
+  setStatus: mode => statusIndicator.setStatus(mode),
   onSessionExit: () => {
     commandInProgress = false
     startInputLoop()
@@ -82,22 +80,17 @@ const { sendVirtualKeyboardInput, handleAltNavigation } =
   })
 altNavigationDelegate = handleAltNavigation
 
-const interactiveDataListener = terminal.onData(data => {
-  if (!isInteractiveMode()) return
-  sendInteractiveInput(data)
-})
-
 xtermReadline.setCtrlCHandler(() => {
   if (isInteractiveMode() || commandInProgress) return
   xtermReadline.println('^C')
-  setStatus('online')
+  statusIndicator.setStatus('online')
   startInputLoop()
 })
 
 window.addEventListener('online', () => {
-  if (!isInteractiveMode()) setStatus('online')
+  if (!isInteractiveMode()) statusIndicator.setStatus('online')
 })
-window.addEventListener('offline', () => setStatus('offline'))
+window.addEventListener('offline', () => statusIndicator.setStatus('offline'))
 
 window.addEventListener('message', event => {
   if (event.data?.type === 'execute') {
@@ -122,7 +115,7 @@ window.addEventListener('message', event => {
 let resizeRaf
 window.addEventListener('resize', () => {
   if (document.hidden) return
-  if (resizeRaf) return
+  if (resizeRaf) cancelAnimationFrame(resizeRaf)
   resizeRaf = window.requestAnimationFrame(() => {
     resizeRaf = undefined
     fitAddon.fit()
@@ -135,13 +128,38 @@ window.addEventListener('resize', () => {
 
 // Tear down the sandbox when the page is closed to avoid idle containers.
 let teardownScheduled = false
+
+// Track if user is navigating away vs refreshing
+let isRefreshing = false
+window.addEventListener('beforeunload', () => {
+  // Set a marker that survives page refresh
+  sessionStorage.setItem('wasRefreshing', 'true')
+  isRefreshing = true
+})
+
+// Check if this was a refresh - the marker will be present
+if (sessionStorage.getItem('wasRefreshing') === 'true') {
+  sessionStorage.removeItem('wasRefreshing')
+  console.debug('Session resumed after refresh:', { sessionId, tabId })
+}
+
 function teardownSandbox() {
   if (teardownScheduled) return
   teardownScheduled = true
+  if (resizeRaf) cancelAnimationFrame(resizeRaf)
   stopWarmup?.()
-  interactiveDataListener.dispose()
-  disposeTerminal()
-  const body = JSON.stringify({ sessionId })
+  terminalManager.dispose()
+
+  // Only reset the sandbox if we're truly closing the tab, not refreshing
+  // isRefreshing is set in beforeunload, so if pagehide fires immediately after,
+  // we're likely refreshing
+  if (isRefreshing) {
+    console.debug('Page refreshing, keeping sandbox alive:', sessionId)
+    return
+  }
+
+  console.debug('Tab closing, destroying sandbox:', sessionId)
+  const body = JSON.stringify({ sessionId, tabId })
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: 'application/json' })
     navigator.sendBeacon('/api/reset', blob)
@@ -157,8 +175,8 @@ function teardownSandbox() {
   })
 }
 
+// pagehide is more reliable than beforeunload for cleanup
 window.addEventListener('pagehide', teardownSandbox, { once: true })
-window.addEventListener('beforeunload', teardownSandbox, { once: true })
 
 startInputLoop()
 
@@ -181,7 +199,7 @@ function startInputLoop() {
       awaitingInput = false
       if (isInteractiveMode()) return
       console.error('xtermReadline error', error)
-      setStatus('error')
+      statusIndicator.setStatus('error')
       startInputLoop()
     })
 
@@ -220,7 +238,7 @@ function startInputLoop() {
 async function processCommand(rawCommand) {
   const trimmed = rawCommand.trim()
   if (!trimmed) {
-    setStatus('online')
+    statusIndicator.setStatus('online')
     return
   }
 
@@ -236,14 +254,14 @@ async function processCommand(rawCommand) {
   }
 
   commandInProgress = true
-  setStatus('online')
+  statusIndicator.setStatus('online')
 
   try {
     await runCommand(rawCommand)
-    if (!isInteractiveMode()) setStatus('online')
+    if (!isInteractiveMode()) statusIndicator.setStatus('online')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    setStatus('error')
+    statusIndicator.setStatus('error')
     displayError(message)
   } finally {
     commandInProgress = false
@@ -265,7 +283,7 @@ function isLocalCommand(command) {
 function executeLocalCommand(command) {
   if (command.trim().toLowerCase() === 'clear') {
     terminal.clear()
-    setStatus('online')
+    statusIndicator.setStatus('online')
   }
 }
 
@@ -278,4 +296,4 @@ function displayError(message) {
   })
 }
 
-export { getTerminal, sendVirtualKeyboardInput }
+export { terminal, sendVirtualKeyboardInput }

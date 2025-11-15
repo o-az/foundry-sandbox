@@ -1,21 +1,27 @@
-import { getTerminal, sendVirtualKeyboardInput } from '../script.mjs'
 import { KeyboardHandler } from './keyboard.mjs'
-
-const keyboardModifiers = new KeyboardHandler({
-  terminal: getTerminal(),
-  virtualInput: sendVirtualKeyboardInput,
-})
 
 const domParser = new DOMParser()
 
 /**
+ * @typedef {Object} ExtraKeysOptions
+ * @property {import('@xterm/xterm').Terminal} terminal
+ * @property {(payload: { key: string; ctrl?: boolean; shift?: boolean }) => void} virtualInput
+ * @property {boolean} [enable]
+ */
+
+/**
  * @param {HTMLElement | null} element
- * @param {{ enable?: boolean }} [options]
+ * @param {ExtraKeysOptions} options
  */
 export function extraKeyboardKeys(element, options) {
-  const shouldEnable = options?.enable ?? true
+  const { terminal, virtualInput, enable = true } = options
   const embedMode = window.location.search.includes('embed=true')
-  if (!element || embedMode || !shouldEnable) return
+  if (!element || embedMode || !enable) return
+
+  const keyboardModifiers = new KeyboardHandler({
+    terminal,
+    virtualInput,
+  })
 
   const footerElement = element.closest('footer#footer')
   if (!footerElement) throw new Error('Footer element not found')
@@ -98,7 +104,6 @@ export function extraKeyboardKeys(element, options) {
   })
 
   // Intercept physical keyboard input when modifiers are active
-  const terminal = getTerminal()
   const textarea = terminal?.textarea
   if (textarea) {
     textarea.addEventListener('keydown', event => {
