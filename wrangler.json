@@ -4,15 +4,14 @@
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
-  "main": "./src/index.ts",
-  "compatibility_date": "2025-10-25",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2025-11-09",
   "compatibility_flags": [
     "nodejs_compat"
   ],
   "assets": {
-    "binding": "Web",
-    "directory": "./src/content",
-    "html_handling": "auto-trailing-slash"
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
   },
   "durable_objects": {
     "bindings": [
@@ -52,6 +51,7 @@
       }
     ]
   },
+  "worker_loaders": [],
   "observability": {
     "enabled": true
   }

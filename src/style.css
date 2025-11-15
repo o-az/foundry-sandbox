@@ -1,3 +1,100 @@
+@font-face {
+  font-family: "Lilex";
+  src: url("/fonts/Lilex.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Lilex";
+  src: url("/fonts/Lilex-Italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Lilex", monospace;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  background: #0d1117;
+  flex-direction: column;
+  font-family: "Lilex", monospace;
+}
+
+#terminal-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+}
+
+#terminal-container {
+  flex: 1;
+  /* padding: 12px; */
+  background: #0d1117;
+  overflow: hidden;
+  height: 100%;
+}
+
+#terminal {
+  width: 100%;
+  height: 100%;
+}
+
+.footer {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer > a {
+  color: #c9d1d990;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 12px;
+  &:hover {
+    color: #ffffff;
+  }
+}
+
+#loading {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  margin: 0 12px 8px 0;
+  color: #c9d1d990;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+div.slider {
+  max-width: 0 !important;
+  background: transparent !important;
+}
+
+@media (max-width: 768px) {
+  footer#footer > a {
+    display: none;
+  }
+}
+
 :root {
   --keyboard-height: 0px;
 }

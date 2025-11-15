@@ -3,7 +3,7 @@ import { getSandbox } from '@cloudflare/sandbox'
 
 export { Sandbox } from '@cloudflare/sandbox'
 
-import { app } from '#setup.ts'
+import { app } from './setup.ts'
 
 // Track active tabs per session
 interface SessionInfo {
@@ -18,8 +18,6 @@ const COMMAND_WS_PORT = Number(env.WS_PORT || 80_80)
 app.get('/ping', context => context.text('ok'))
 app.get('/health', context => context.text('ok'))
 app.get('/api/ping', context => context.text('ok'))
-
-app.get('/', context => context.env.Web.fetch(context.req.raw))
 
 app.get('/.well-known*', context =>
   context.redirect('https://h0n0.evm.workers.dev/cat'),
@@ -169,14 +167,13 @@ function getOrCreateSandboxId(sessionId: string, tabId?: string): string {
 
   if (!sessionInfo) {
     // Create new session
-    const sandboxId = `sandbox-${sessionId}`
     sessionInfo = {
-      sandboxId,
+      sandboxId: sessionId,
       activeTabs: new Set(tabId ? [tabId] : []),
       lastActivity: Date.now(),
     }
     sessions.set(sessionId, sessionInfo)
-    return sandboxId
+    return sessionId
   }
 
   // Update existing session

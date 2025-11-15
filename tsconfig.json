@@ -34,10 +34,12 @@
   },
   "include": [
     "./src/**/*",
+    "./worker/**/*",
     "./scripts/**/*"
   ],
   "files": [
     "reset.d.ts",
+    "vite.config.ts",
     "worker-configuration.d.ts"
   ],
   "exclude": [

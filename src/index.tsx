@@ -24,7 +24,9 @@ let recoveringSession = false
 let sessionBroken = false
 
 /** @type {(event: KeyboardEvent) => boolean} */
-let altNavigationDelegate = () => false
+let altNavigationDelegate: (event: KeyboardEvent) => boolean = (
+  _event: KeyboardEvent,
+): boolean => false
 
 const terminalManager = new TerminalManager()
 const terminalElement = document.querySelector('div#terminal')
@@ -113,7 +115,7 @@ window.addEventListener('message', event => {
 })
 
 /** @type {number | undefined} */
-let resizeRaf
+let resizeRaf: number | undefined
 window.addEventListener('resize', () => {
   if (document.hidden) return
   if (resizeRaf) cancelAnimationFrame(resizeRaf)
@@ -185,7 +187,7 @@ startInputLoop()
  * Kicks off the readline prompt loop unless an interactive session is active.
  * @returns {void}
  */
-function startInputLoop() {
+function startInputLoop(): void {
   if (isInteractiveMode() || awaitingInput) return
   awaitingInput = true
 
@@ -236,7 +238,7 @@ function startInputLoop() {
  * @param {string} rawCommand
  * @returns {Promise<void>}
  */
-async function processCommand(rawCommand) {
+async function processCommand(rawCommand: string): Promise<void> {
   const trimmed = rawCommand.trim()
   if (!trimmed) {
     statusIndicator.setStatus('online')
@@ -286,7 +288,7 @@ async function processCommand(rawCommand) {
  * @param {string} command
  * @returns {boolean}
  */
-function isLocalCommand(command) {
+function isLocalCommand(command: string): boolean {
   return LOCAL_COMMANDS.has(command.trim().toLowerCase())
 }
 
@@ -294,7 +296,7 @@ function isLocalCommand(command) {
  * @param {string} command
  * @returns {void}
  */
-function executeLocalCommand(command) {
+function executeLocalCommand(command: string): void {
   const normalized = command.trim().toLowerCase()
   if (normalized === 'clear') {
     terminal.clear()
@@ -308,7 +310,7 @@ function executeLocalCommand(command) {
 /**
  * @param {string} message
  */
-function displayError(message) {
+function displayError(message: string) {
   terminal.writeln(`\u001b[31m${message}\u001b[0m`, () => {
     console.info(serializeAddon.serialize())
   })
@@ -318,7 +320,7 @@ function displayError(message) {
  * @param {string} message
  * @returns {boolean}
  */
-function isFatalSandboxError(message) {
+function isFatalSandboxError(message: string): boolean {
   const normalized = message.toLowerCase()
   return (
     normalized.includes('shell has died') ||
@@ -332,7 +334,7 @@ function isFatalSandboxError(message) {
  * @param {string} message
  * @returns {void}
  */
-function handleFatalSandboxError(message) {
+function handleFatalSandboxError(message: string): void {
   sessionBroken = true
   statusIndicator.setStatus('error')
   displayError(
@@ -343,7 +345,7 @@ function handleFatalSandboxError(message) {
 /**
  * @returns {Promise<void>}
  */
-async function resetSandboxSession() {
+async function resetSandboxSession(): Promise<void> {
   if (recoveringSession) return
   recoveringSession = true
   statusIndicator.setStatus('error')

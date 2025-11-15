@@ -2,7 +2,7 @@
 *
 
 # except for
-!./src/**/*
+!./worker/**/*
 !./scripts/startup.sh
 
 !./package.json
