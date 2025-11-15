@@ -10,11 +10,29 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiWsRouteImport } from './routes/api/ws'
+import { Route as ApiResetRouteImport } from './routes/api/reset'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiExecRouteImport } from './routes/api/exec'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWsRoute = ApiWsRouteImport.update({
+  id: '/api/ws',
+  path: '/api/ws',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiResetRoute = ApiResetRouteImport.update({
+  id: '/api/reset',
+  path: '/api/reset',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExecRoute = ApiExecRouteImport.update({
@@ -26,27 +44,39 @@ const ApiExecRoute = ApiExecRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/exec': typeof ApiExecRoute
+  '/api/health': typeof ApiHealthRoute
+  '/api/reset': typeof ApiResetRoute
+  '/api/ws': typeof ApiWsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/exec': typeof ApiExecRoute
+  '/api/health': typeof ApiHealthRoute
+  '/api/reset': typeof ApiResetRoute
+  '/api/ws': typeof ApiWsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/exec': typeof ApiExecRoute
+  '/api/health': typeof ApiHealthRoute
+  '/api/reset': typeof ApiResetRoute
+  '/api/ws': typeof ApiWsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/exec'
+  fullPaths: '/' | '/api/exec' | '/api/health' | '/api/reset' | '/api/ws'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/exec'
-  id: '__root__' | '/' | '/api/exec'
+  to: '/' | '/api/exec' | '/api/health' | '/api/reset' | '/api/ws'
+  id: '__root__' | '/' | '/api/exec' | '/api/health' | '/api/reset' | '/api/ws'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiExecRoute: typeof ApiExecRoute
+  ApiHealthRoute: typeof ApiHealthRoute
+  ApiResetRoute: typeof ApiResetRoute
+  ApiWsRoute: typeof ApiWsRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -56,6 +86,27 @@ declare module '@tanstack/solid-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ws': {
+      id: '/api/ws'
+      path: '/api/ws'
+      fullPath: '/api/ws'
+      preLoaderRoute: typeof ApiWsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/reset': {
+      id: '/api/reset'
+      path: '/api/reset'
+      fullPath: '/api/reset'
+      preLoaderRoute: typeof ApiResetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/exec': {
@@ -71,12 +122,16 @@ declare module '@tanstack/solid-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiExecRoute: ApiExecRoute,
+  ApiHealthRoute: ApiHealthRoute,
+  ApiResetRoute: ApiResetRoute,
+  ApiWsRoute: ApiWsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/solid-start'
 declare module '@tanstack/solid-start' {
   interface Register {
     ssr: true

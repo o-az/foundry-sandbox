@@ -32,3 +32,15 @@ export function clearSandboxSession(sessionId: string) {
 export function getSandboxSession(sessionId: string) {
   return sessions.get(sessionId)
 }
+
+export function removeActiveTab(sessionId: string, tabId?: string) {
+  const sessionInfo = sessions.get(sessionId)
+  if (!sessionInfo) return 0
+  if (tabId) sessionInfo.activeTabs.delete(tabId)
+  sessionInfo.lastActivity = Date.now()
+  return sessionInfo.activeTabs.size
+}
+
+export function getActiveTabCount(sessionId: string) {
+  return sessions.get(sessionId)?.activeTabs.size ?? 0
+}

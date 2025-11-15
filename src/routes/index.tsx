@@ -1,15 +1,26 @@
-import { onMount, onCleanup, createSignal } from 'solid-js'
-
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { WebglAddon } from '@xterm/addon-webgl'
-import { SearchAddon } from '@xterm/addon-search'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import { SerializeAddon } from '@xterm/addon-serialize'
-import { Unicode11Addon } from '@xterm/addon-unicode11'
-import { LigaturesAddon } from '@xterm/addon-ligatures'
-import { ClipboardAddon } from '@xterm/addon-clipboard'
+import { createSignal, onCleanup, onMount } from 'solid-js'
 import { createFileRoute } from '@tanstack/solid-router'
+
+import {
+  clearStoredSessionState,
+  consumeRefreshIntent,
+  ensureClientSession,
+  INTERACTIVE_COMMANDS,
+  STREAMING_COMMANDS,
+  markRefreshIntent,
+} from '#lib/client-session.ts'
+import { createCommandRunner } from '#lib/command-runner.ts'
+import { createInteractiveSession } from '#lib/interactive-session.ts'
+import { initKeyboardInsets } from '#lib/keyboard-insets.ts'
+import { extraKeyboardKeys } from '#lib/extra-keys.ts'
+import {
+  StatusIndicator,
+  STATUS_STYLE,
+  type StatusMode,
+} from '#lib/status-indicator.ts'
+import { TerminalManager } from '#lib/terminal-manager.ts'
+import { createVirtualKeyboardBridge } from '#lib/virtual-keyboard.ts'
+import { startSandboxWarmup } from '#lib/warmup.ts'
 
 const PROMPT = ' \u001b[32m$\u001b[0m '
 const LOCAL_COMMANDS = new Set(['clear', 'reset'])
@@ -18,192 +29,382 @@ export const Route = createFileRoute('/')({
   component: TerminalPage,
 })
 
-function TerminalPage() {
-  const sessionId = createClientId('session')
-  const tabId = createClientId('tab')
-  const [status, setStatus] = createSignal('Ready')
-  const [isRunning, setIsRunning] = createSignal(false)
+export default function TerminalPage() {
+  const [statusMode, setStatusMode] = createSignal<StatusMode>('offline')
+  const [sessionLabel, setSessionLabel] = createSignal('')
+  const [statusMessage, setStatusMessage] = createSignal('Ready')
 
   let terminalRef: HTMLDivElement | undefined
-  let term: Terminal
-  let currentLine = ''
+  let footerRef: HTMLElement | undefined
 
   onMount(() => {
-    if (!terminalRef) return
+    const session = ensureClientSession()
+    setSessionLabel(session.sessionId)
 
-    term = new Terminal({
-      fontSize: 17,
-      lineHeight: 1.2,
-      scrollback: 5000,
-      convertEol: true,
-      cursorBlink: true,
-      allowProposedApi: true,
-      scrollOnUserInput: false,
-      cursorStyle: 'underline',
-      rightClickSelectsWord: true,
-      rescaleOverlappingGlyphs: true,
-      ignoreBracketedPasteMode: true,
-      cursorInactiveStyle: 'underline',
-      drawBoldTextInBrightColors: true,
-      fontFamily: 'Lilex, monospace',
-      theme: {
-        background: '#0d1117',
-        foreground: '#c9d1d9',
-        cursor: '#58a6ff',
-        black: '#484f58',
-        red: '#ff7b72',
-        green: '#3fb950',
-        yellow: '#d29922',
-        blue: '#58a6ff',
-        magenta: '#bc8cff',
-        cyan: '#39c5cf',
-        white: '#b1bac4',
-        brightBlack: '#6e7681',
-        brightRed: '#ffa198',
-        brightGreen: '#56d364',
-        brightYellow: '#e3b341',
-        brightBlue: '#79c0ff',
-        brightMagenta: '#d2a8ff',
-        brightCyan: '#56d4dd',
-        brightWhite: '#f0f6fc',
-      },
+    const terminalManager = new TerminalManager()
+    const statusIndicator = new StatusIndicator(undefined, {
+      onChange: mode => setStatusMode(mode),
     })
 
-    const fitAddon = new FitAddon()
-    const searchAddon = new SearchAddon()
-    const unicodeAddon = new Unicode11Addon()
-    const webLinksAddon = new WebLinksAddon()
-    const serializeAddon = new SerializeAddon()
-    const ligaturesAddon = new LigaturesAddon()
-    const clipboardAddon = new ClipboardAddon()
+    const terminalElement = terminalRef
+    if (!terminalElement) throw new Error('Terminal mount missing')
 
-    try {
-      const webglAddon = new WebglAddon()
-      term.loadAddon(webglAddon)
-    } catch (error) {
-      console.warn(
-        'WebGL addon failed to load; falling back to canvas renderer.',
-        error,
+    let stopWarmup: (() => void) | undefined
+    let cleanupInsets: (() => void) | undefined
+    let resizeRaf: number | undefined
+    let teardownScheduled = false
+    let awaitingInput = false
+    let commandInProgress = false
+    let hasPrefilledCommand = false
+    let sessionBroken = false
+    let recoveringSession = false
+    let isRefreshing = false
+    let altNavigationDelegate: ((event: KeyboardEvent) => boolean) | undefined
+
+    const terminal = terminalManager.init(terminalElement, {
+      onAltNavigation: event => altNavigationDelegate?.(event) ?? false,
+    })
+    const fitAddon = terminalManager.fitAddon
+    const xtermReadline = terminalManager.readline
+    const readlineApi = xtermReadline as unknown as {
+      read: (prompt: string) => Promise<string>
+      println: (line: string) => void
+      setCtrlCHandler: (handler: () => void) => void
+    }
+    const serializeAddon = terminalManager.serializeAddon
+
+    const { runCommand } = createCommandRunner({
+      sessionId: session.sessionId,
+      terminal,
+      setStatus: mode => statusIndicator.setStatus(mode),
+      displayError,
+      streamingCommands: STREAMING_COMMANDS,
+    })
+
+    const {
+      startInteractiveSession,
+      sendInteractiveInput,
+      notifyResize,
+      isInteractiveMode,
+    } = createInteractiveSession({
+      terminal,
+      serializeAddon,
+      sessionId: session.sessionId,
+      setStatus: mode => statusIndicator.setStatus(mode),
+      onSessionExit: () => {
+        commandInProgress = false
+        setStatusMessage('Ready')
+        startInputLoop()
+      },
+      logLevel: session.logLevel,
+    })
+
+    const virtualKeyboard = createVirtualKeyboardBridge({
+      xtermReadline,
+      sendInteractiveInput,
+      isInteractiveMode,
+    })
+    altNavigationDelegate = virtualKeyboard.handleAltNavigation
+
+    extraKeyboardKeys(footerRef ?? null, {
+      terminal,
+      virtualInput: virtualKeyboard.sendVirtualKeyboardInput,
+    })
+
+    cleanupInsets = initKeyboardInsets()
+
+    terminal.writeln('\r')
+    terminal.focus()
+    statusIndicator.setStatus(navigator.onLine ? 'online' : 'offline')
+
+    if (footerRef) {
+      if (!session.embedMode) footerRef.classList.add('footer')
+      else footerRef.classList.remove('footer')
+    }
+
+    const resumed = consumeRefreshIntent()
+    if (resumed) {
+      console.debug('Session resumed after refresh:', {
+        sessionId: session.sessionId,
+        tabId: session.tabId,
+      })
+    }
+
+    const stopWarmupLoop = startSandboxWarmup({
+      sessionId: session.sessionId,
+      tabId: session.tabId,
+    })
+    stopWarmup = stopWarmupLoop
+
+    const handleOnline = () => {
+      if (!isInteractiveMode()) statusIndicator.setStatus('online')
+    }
+    const handleOffline = () => statusIndicator.setStatus('offline')
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'execute') {
+        terminal.options.disableStdin = false
+        const enterEvent = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+        })
+        terminal.textarea?.dispatchEvent(enterEvent)
+        setTimeout(() => {
+          if (session.embedMode) terminal.options.disableStdin = true
+        }, 200)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+
+    let resizeListener = () => {}
+    const handleResize = () => {
+      if (document.hidden) return
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
+      resizeRaf = window.requestAnimationFrame(() => {
+        resizeRaf = undefined
+        fitAddon.fit()
+        notifyResize({ cols: terminal.cols, rows: terminal.rows })
+      })
+    }
+    resizeListener = handleResize
+    window.addEventListener('resize', resizeListener)
+
+    readlineApi.setCtrlCHandler(() => {
+      if (isInteractiveMode() || commandInProgress) return
+      readlineApi.println('^C')
+      statusIndicator.setStatus('online')
+      setStatusMessage('Ready')
+      startInputLoop()
+    })
+
+    const handleBeforeUnload = () => {
+      markRefreshIntent()
+      isRefreshing = true
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    const teardownSandbox = () => {
+      if (teardownScheduled) return
+      teardownScheduled = true
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
+      resizeRaf = undefined
+      stopWarmup?.()
+      cleanupInsets?.()
+      terminalManager.dispose()
+
+      if (isRefreshing) {
+        console.debug(
+          'Page refreshing, keeping sandbox alive:',
+          session.sessionId,
+        )
+        return
+      }
+
+      const body = JSON.stringify({
+        sessionId: session.sessionId,
+        tabId: session.tabId,
+      })
+      if (navigator.sendBeacon) {
+        const blob = new Blob([body], { type: 'application/json' })
+        navigator.sendBeacon('/api/reset', blob)
+        return
+      }
+      fetch('/api/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => {
+        // ignore errors during teardown
+      })
+    }
+
+    window.addEventListener('pagehide', teardownSandbox, { once: true })
+
+    const cleanup = () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('message', handleMessage)
+      window.removeEventListener('resize', resizeListener)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('pagehide', teardownSandbox)
+      teardownSandbox()
+    }
+
+    startInputLoop()
+
+    onCleanup(cleanup)
+
+    function startInputLoop() {
+      if (isInteractiveMode() || awaitingInput) return
+      awaitingInput = true
+
+      readlineApi
+        .read(PROMPT)
+        .then(async rawCommand => {
+          awaitingInput = false
+          await processCommand(rawCommand)
+          startInputLoop()
+        })
+        .catch(error => {
+          awaitingInput = false
+          if (isInteractiveMode()) return
+          console.error('xtermReadline error', error)
+          statusIndicator.setStatus('error')
+          startInputLoop()
+        })
+
+      if (!hasPrefilledCommand && session.prefilledCommand) {
+        hasPrefilledCommand = true
+        setTimeout(() => {
+          const dataTransfer = new DataTransfer()
+          dataTransfer.setData('text/plain', session.prefilledCommand ?? '')
+          const pasteEvent = new ClipboardEvent('paste', {
+            clipboardData: dataTransfer,
+          })
+          terminal.textarea?.dispatchEvent(pasteEvent)
+
+          if (session.embedMode && !session.autoRun) {
+            terminal.options.disableStdin = true
+          }
+
+          if (session.autoRun) {
+            setTimeout(() => {
+              const enterEvent = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+              })
+              terminal.textarea?.dispatchEvent(enterEvent)
+            }, 100)
+          }
+        }, 50)
+      }
+    }
+
+    async function processCommand(rawCommand: string) {
+      const trimmed = rawCommand.trim()
+      if (!trimmed) {
+        statusIndicator.setStatus(navigator.onLine ? 'online' : 'offline')
+        setStatusMessage('Ready')
+        return
+      }
+
+      const normalized = trimmed.toLowerCase()
+      if (sessionBroken && normalized !== 'reset') {
+        statusIndicator.setStatus('error')
+        displayError(
+          'Sandbox shell is unavailable. Type `reset` or refresh the page to start a new session.',
+        )
+        return
+      }
+
+      if (isLocalCommand(trimmed)) {
+        executeLocalCommand(trimmed)
+        return
+      }
+
+      if (INTERACTIVE_COMMANDS.has(normalized)) {
+        commandInProgress = true
+        setStatusMessage(`Interactive: ${trimmed}`)
+        await startInteractiveSession(rawCommand)
+        return
+      }
+
+      commandInProgress = true
+      statusIndicator.setStatus('online')
+      setStatusMessage(`Running: ${trimmed}`)
+
+      try {
+        await runCommand(rawCommand)
+        if (!isInteractiveMode()) {
+          statusIndicator.setStatus('online')
+          setStatusMessage('Ready')
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (isFatalSandboxError(message)) {
+          handleFatalSandboxError(message)
+          return
+        }
+        statusIndicator.setStatus('error')
+        setStatusMessage('Error')
+        displayError(message)
+      } finally {
+        commandInProgress = false
+      }
+    }
+
+    function isLocalCommand(command: string) {
+      return LOCAL_COMMANDS.has(command.trim().toLowerCase())
+    }
+
+    function executeLocalCommand(command: string) {
+      const normalized = command.trim().toLowerCase()
+      if (normalized === 'clear') {
+        terminal.clear()
+        statusIndicator.setStatus('online')
+        setStatusMessage('Ready')
+        return
+      }
+      if (normalized === 'reset') {
+        void resetSandboxSession()
+      }
+    }
+
+    function displayError(message: string) {
+      terminal.writeln(`\u001b[31m${message}\u001b[0m`, () => {
+        console.info(serializeAddon.serialize())
+      })
+    }
+
+    function isFatalSandboxError(message: string) {
+      const normalized = message.toLowerCase()
+      return (
+        normalized.includes('shell has died') ||
+        normalized.includes('session is dead') ||
+        normalized.includes('shell terminated unexpectedly') ||
+        normalized.includes('not ready or shell has died')
       )
     }
 
-    term.open(terminalRef)
+    function handleFatalSandboxError(message: string) {
+      sessionBroken = true
+      statusIndicator.setStatus('error')
+      displayError(
+        `${message}\nType \`reset\` or refresh the page to create a new sandbox session.`,
+      )
+    }
 
-    term.loadAddon(fitAddon)
-    fitAddon.fit()
-    term.loadAddon(unicodeAddon)
-    term.loadAddon(searchAddon)
-    term.loadAddon(webLinksAddon)
-    term.loadAddon(serializeAddon)
-    term.loadAddon(ligaturesAddon)
-    term.loadAddon(clipboardAddon)
-    term.unicode.activeVersion = '11'
-
-    term.focus()
-    term.writeln(`Session: ${sessionId}`)
-    renderPrompt(term, { prependNewLine: false })
-
-    const keyListener = term.onData(data => {
-      if (!term) return
-      if (isRunning() && data !== '\u0003') {
-        term.write('\x07')
-        return
-      }
-
-      switch (data) {
-        case '\r':
-          void handleCommand(term)
-          return
-        case '\u0003':
-          term.write('^C')
-          currentLine = ''
-          renderPrompt(term)
-          return
-        case '\u007f':
-          if (currentLine.length === 0) return
-          currentLine = currentLine.slice(0, -1)
-          term.write('\b \b')
-          return
-        default: {
-          const code = data.charCodeAt(0)
-          if (code === 0x1b) return // swallow escape sequences for now
-          if (data >= ' ' && data <= '~') {
-            currentLine += data
-            term.write(data)
-          }
-        }
-      }
-    })
-
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => fitAddon.fit())
-    })
-    resizeObserver.observe(terminalRef)
-
-    onCleanup(() => {
-      keyListener.dispose()
-      resizeObserver?.disconnect()
-      term?.dispose()
-    })
-
-    async function handleCommand(activeTerminal: Terminal) {
-      const command = currentLine.trim()
-      activeTerminal.write('\r\n')
-      currentLine = ''
-
-      if (!command.length) {
-        renderPrompt(activeTerminal, { prependNewLine: false })
-        return
-      }
-
-      setIsRunning(true)
-      setStatus(`Running: ${command}`)
+    async function resetSandboxSession() {
+      if (recoveringSession) return
+      recoveringSession = true
+      statusIndicator.setStatus('error')
+      setStatusMessage('Resetting...')
+      terminal.writeln('\nResetting sandbox session...')
 
       try {
-        const response = await fetch('/api/exec', {
+        await fetch('/api/reset', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ command, sessionId, tabId }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            tabId: session.tabId,
+          }),
         })
-
-        const payload = (await response.json().catch(() => ({}))) as {
-          error?: string
-          details?: string
-        }
-
-        if (!response.ok || payload.error) {
-          const errorMessage = payload.error || response.statusText
-          activeTerminal.writeln(`\x1b[31mError: ${errorMessage}\x1b[0m`)
-          if (payload.details) activeTerminal.writeln(String(payload.details))
-        } else {
-          const { result } = payload as { result?: SandboxExecResult }
-          const stdout = result?.stdout || ''
-          const stderr = result?.stderr || ''
-          const duration = result?.duration
-
-          if (stdout) activeTerminal.write(stdout.replace(/\n/g, '\r\n'))
-          if (stderr) {
-            activeTerminal.write(
-              `\r\n\x1b[38;5;203m${stderr.replace(/\n/g, '\r\n')}\x1b[0m`,
-            )
-          }
-          if (typeof duration === 'number') {
-            activeTerminal.writeln(
-              `\r\n[exit ${result?.code ?? 0} | ${duration}ms]`,
-            )
-          }
-        }
       } catch (error) {
-        activeTerminal.writeln(
-          `\x1b[31mClient request failed:\x1b[0m ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        )
-      } finally {
-        setIsRunning(false)
-        setStatus('Ready')
-        renderPrompt(activeTerminal, { prependNewLine: false })
+        console.error('Failed to reset sandbox session', error)
       }
+
+      clearStoredSessionState()
+      setTimeout(() => window.location.reload(), 500)
     }
   })
 
@@ -212,35 +413,24 @@ function TerminalPage() {
       <div id="terminal-container">
         <div
           id="terminal"
-          ref={element => (terminalRef = element || undefined)}
+          ref={element => {
+            terminalRef = element
+          }}
         />
       </div>
-      <footer class="footer px-4 py-3 text-xs uppercase tracking-wide text-slate-400">
-        <span>Session {sessionId}</span>
-        <span>{status()}</span>
+      <footer
+        id="footer"
+        ref={element => {
+          footerRef = element
+        }}
+        class="px-4 py-3 text-xs uppercase tracking-wide text-slate-400 flex items-center justify-between gap-4">
+        <span>Session {sessionLabel()}</span>
+        <p
+          class="font-semibold"
+          style={{ color: STATUS_STYLE[statusMode()].color }}>
+          {STATUS_STYLE[statusMode()].text} · {statusMessage()}
+        </p>
       </footer>
     </main>
   )
-}
-
-function renderPrompt(
-  term: Terminal,
-  _options: { prependNewLine?: boolean } = {},
-) {
-  term.write(PROMPT)
-}
-
-type SandboxExecResult = {
-  stdout?: string
-  stderr?: string
-  code?: number
-  duration?: number
-}
-
-function createClientId(prefix: string) {
-  const id =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2)
-  return `${prefix}-${id}`
 }

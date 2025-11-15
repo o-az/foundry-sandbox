@@ -43,7 +43,7 @@ function RootDocument({ children }: { children: Solid.JSX.Element }) {
       <body>
         <HeadContent />
         <Solid.Suspense>{children}</Solid.Suspense>
-        <TanStackRouterDevtools position="bottom-right" />
+        <TanStackRouterDevtools position="top-right" />
         <Scripts />
       </body>
     </html>
