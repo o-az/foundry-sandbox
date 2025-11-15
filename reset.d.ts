@@ -1,1 +1,1 @@
-import '@total-typescript/ts-reset/recommended'
+import '@total-typescript/ts-reset/dom'

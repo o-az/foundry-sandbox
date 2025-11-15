@@ -1,50 +1,34 @@
 /// <reference types="vite/client" />
 
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/solid-router'
-import { TanStackRouterDevtools } from '@tanstack/solid-router-devtools'
-import { HydrationScript } from 'solid-js/web'
 import * as Solid from 'solid-js'
-import appCss from '../style.css?url'
+import { HydrationScript } from 'solid-js/web'
+import { TanStackRouterDevtools } from '@tanstack/solid-router-devtools'
+import { HeadContent, Scripts, createRootRoute } from '@tanstack/solid-router'
+
+import appCss from '#style.css?url'
+import xtermCss from '@xterm/xterm/css/xterm.css?url'
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
-      {
-        charset: 'utf-8',
-      },
+      { charset: 'utf-8' },
+      { name: 'description', content: '⌛ 📦' },
+      { name: 'keywords', content: 'foundry, web, shell' },
       {
         name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
+        content:
+          'width=device-width, initial-scale=1.0, interactive-widget=resizes-content',
       },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      {
-        rel: 'apple-touch-icon',
-        sizes: '180x180',
-        href: '/apple-touch-icon.png',
-      },
+      { rel: 'stylesheet', href: xtermCss },
       {
         rel: 'icon',
-        type: 'image/png',
-        sizes: '32x32',
-        href: '/favicon-32x32.png',
-      },
-      {
-        rel: 'icon',
-        type: 'image/png',
-        sizes: '16x16',
-        href: '/favicon-16x16.png',
-      },
-      { rel: 'manifest', href: '/site.webmanifest', color: '#fffff' },
-      { rel: 'icon', href: '/favicon.ico' },
-    ],
-    scripts: [
-      {
-        src: '/customScript.js',
-        type: 'text/javascript',
+        href: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐚</text></svg>',
       },
     ],
+    scripts: [],
   }),
 
   shellComponent: RootDocument,
