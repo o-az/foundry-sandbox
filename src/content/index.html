@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" >
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" >
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" >
     <title>fndry</title>
     <meta name="description" content="⌛ 📦" >
     <meta name="keywords" content="foundry, web, shell" >
@@ -58,14 +60,19 @@
 
     <script type="module" src="./script.mjs">
       if (!HTMLScriptElement.supports('importmap')) throw new Error('Importmap is not supported')
+      if ('virtualKeyboard' in navigator) navigator.virtualKeyboard.overlaysContent = true
     </script>
 
     <script type="module">
       import { terminal, sendVirtualKeyboardInput } from './script.mjs'
       import { extraKeyboardKeys } from './input/extra-keys.mjs'
       import { getClientEnvironment } from './state/client-env.mjs'
+      import { initKeyboardInsets } from './input/keyboard-insets.mjs'
 
       const footer = document.querySelector('footer#footer')
+      const teardownInsets = initKeyboardInsets()
+      window.addEventListener('pagehide', teardownInsets, { once: true })
+
       const env = getClientEnvironment()
       const deviceType = env.device?.type?.toLowerCase()
       const isMobileUA = deviceType === 'mobile' || deviceType === 'tablet'

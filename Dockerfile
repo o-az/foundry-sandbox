@@ -9,14 +9,17 @@ RUN apt-get update --yes \
   && apt-get install --yes --no-install-recommends vim-tiny \
   && rm -rf /var/lib/apt/lists/*
 
+
+RUN ls -la
 RUN npm install --global \
   @foundry-rs/cast@nightly \
   @foundry-rs/forge@nightly \
   @foundry-rs/anvil@nightly \
   @foundry-rs/chisel@nightly
 
-COPY src/websocket.ts websocket.ts
-COPY scripts/startup.sh startup.sh
+
+COPY ./src/websocket.ts websocket.ts
+COPY ./scripts/startup.sh startup.sh
 RUN chmod +x startup.sh
 
 ENV WS_PORT=8080

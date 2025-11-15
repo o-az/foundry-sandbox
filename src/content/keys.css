@@ -1,24 +1,33 @@
+:root {
+  --keyboard-height: 0px;
+}
+
 .keyboard-container {
-  gap: 14px;
+  /* make the bar float above content */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(
+    env(safe-area-inset-bottom, 0px) +
+    max(env(keyboard-inset-height, 0px), var(--keyboard-height, 0px)) +
+    4px
+  );
   z-index: 1000;
+  gap: 14px;
   padding: 10px;
-  margin: 0 auto;
-  align-items: center;
-  display: inline-flex;
+  display: flex;
   justify-content: center;
   background-color: #0c0f15;
-  transform: translateY(0);
-  opacity: 1;
   transition:
     opacity 0.3s ease-out,
     transform 0.3s ease-out;
 }
 
+/* hide/show uses data-hidden attribute as before */
 .keyboard-container[data-hidden="true"] {
+  transform: translateY(100%);
   opacity: 0;
-  overflow: hidden;
   pointer-events: none;
-  transform: translateY(100px);
 }
 
 .key {
@@ -36,7 +45,7 @@
   text-align: center;
   align-items: center;
   max-width: min-content;
-  /* font-family: monospace; */
+  font-family: monospace;
   justify-content: center;
   -webkit-user-select: none;
   background-color: #3a3a3c;
@@ -64,14 +73,13 @@
 }
 
 #extra-keys-toggler {
-  position: absolute;
+  position: fixed;
   right: 0;
-  bottom: 0;
+  bottom: calc(
+    env(safe-area-inset-bottom, 0px) +
+    max(env(keyboard-inset-height, 0px), var(--keyboard-height, 0px)) +
+    4px
+  );
   margin: 4px;
   padding: 4px;
-  display: flex;
-  cursor: pointer;
-  align-items: center;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
