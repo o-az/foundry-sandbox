@@ -102,7 +102,6 @@ div.slider {
 }
 
 .keyboard-container {
-  /* make the bar float above content */
   position: fixed;
   left: 0;
   right: 0;

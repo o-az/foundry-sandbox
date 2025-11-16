@@ -37,7 +37,8 @@ jobs:
       - name: 'Lint, Format & Typecheck'
         run: |
           bun x @biomejs/biome check .
-          bun tsc --project tsconfig.json --noEmit
+
+          bun tsgo --project tsconfig.json --noEmit
 
       - name: 'Build Worker & Workspaces'
         run: |

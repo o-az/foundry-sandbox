@@ -40,7 +40,9 @@ export const Route = createFileRoute('/api/ws')({
         const websocketPort = WebSocketSchema.Port.parse(env.WS_PORT)
 
         const sandboxId = getOrCreateSandboxId(payload.data.sessionId)
-        const sandbox = getSandbox(env.Sandbox, sandboxId, { keepAlive: true })
+        const sandbox = getSandbox(env.Sandbox, sandboxId, {
+          // keepAlive: true,
+        })
 
         return sandbox.wsConnect(request, websocketPort)
       },

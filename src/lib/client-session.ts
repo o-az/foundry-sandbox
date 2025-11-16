@@ -21,6 +21,7 @@ export function ensureClientSession(): ClientSessionState {
   let sessionId = localStorage.getItem('sessionId')
   if (!sessionId) {
     sessionId = `session-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 9)}`
+
     localStorage.setItem('sessionId', sessionId)
   }
 

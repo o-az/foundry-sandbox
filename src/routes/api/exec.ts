@@ -1,8 +1,8 @@
 import * as z from 'zod/mini'
 import { env } from 'cloudflare:workers'
 import { json } from '@tanstack/solid-start'
-import { getSandbox } from '@cloudflare/sandbox'
 import { createFileRoute } from '@tanstack/solid-router'
+import { getSandbox, type ExecResult } from '@cloudflare/sandbox'
 
 import { getOrCreateSandboxId } from '#lib/sandbox-session.ts'
 
@@ -26,9 +26,7 @@ export const Route = createFileRoute('/api/exec')({
         const { command, sessionId } = payload.data
 
         const sandboxId = getOrCreateSandboxId(sessionId)
-        const sandbox = getSandbox(env.Sandbox, sandboxId, {
-          keepAlive: true,
-        })
+        const sandbox = getSandbox(env.Sandbox, sandboxId)
 
         const result = await sandbox.exec(command, {
           timeout: DEFAULT_TIMEOUT_MS,
@@ -47,4 +45,16 @@ export const Route = createFileRoute('/api/exec')({
         }),
     },
   },
+})
+
+const _fakeResult = (): ExecResult => ({
+  success: true,
+  exitCode: 0,
+  stdout:
+    ' _____\n< moo >\n -----\n        \\   ^__^\n         \\  (oo)\\_______\n            (__)\\       )\\/\\\n                ||----w |\n                ||     ||',
+  stderr: '',
+  command: "npx cowsay 'moo'",
+  duration: 729,
+  timestamp: '1989-01-01T00:00:00.000Z',
+  sessionId: 'session-01010101-0202-0303-0404-050505050505',
 })

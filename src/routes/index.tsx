@@ -15,11 +15,10 @@ import {
   clearStoredSessionState,
 } from '#lib/client-session.ts'
 import { startSandboxWarmup } from '#lib/warmup.ts'
-import { extraKeyboardKeys } from '#lib/extra-keys.ts'
 import { TerminalManager } from '#lib/terminal-manager.ts'
 import { initKeyboardInsets } from '#lib/keyboard-insets.ts'
 import { createCommandRunner } from '#lib/command-runner.ts'
-import { createVirtualKeyboardBridge } from '#lib/virtual-keyboard.ts'
+import { ExtraKeyboard } from '#components/extra-keyboard.tsx'
 import { createInteractiveSession } from '#lib/interactive-session.ts'
 
 const PROMPT = ' \u001b[32m$\u001b[0m '
@@ -81,35 +80,19 @@ function Page() {
       streamingCommands: STREAMING_COMMANDS,
     })
 
-    const {
-      startInteractiveSession,
-      sendInteractiveInput,
-      notifyResize,
-      isInteractiveMode,
-    } = createInteractiveSession({
-      terminal,
-      serializeAddon,
-      sessionId: session.sessionId,
-      setStatus: mode => statusIndicator.setStatus(mode),
-      onSessionExit: () => {
-        commandInProgress = false
-        setStatusMessage('Ready')
-        startInputLoop()
-      },
-      logLevel: session.logLevel,
-    })
-
-    const virtualKeyboard = createVirtualKeyboardBridge({
-      xtermReadline,
-      sendInteractiveInput,
-      isInteractiveMode,
-    })
-    altNavigationDelegate = virtualKeyboard.handleAltNavigation
-
-    extraKeyboardKeys(footerRef ?? null, {
-      terminal,
-      virtualInput: virtualKeyboard.sendVirtualKeyboardInput,
-    })
+    const { startInteractiveSession, notifyResize, isInteractiveMode } =
+      createInteractiveSession({
+        terminal,
+        serializeAddon,
+        sessionId: session.sessionId,
+        setStatus: mode => statusIndicator.setStatus(mode),
+        onSessionExit: () => {
+          commandInProgress = false
+          setStatusMessage('Ready')
+          startInputLoop()
+        },
+        logLevel: session.logLevel,
+      })
 
     cleanupInsets = initKeyboardInsets()
 
@@ -153,6 +136,7 @@ function Page() {
           which: 13,
           bubbles: true,
         })
+        console.info(terminal)
         terminal.textarea?.dispatchEvent(enterEvent)
         setTimeout(() => {
           if (session.embedMode) terminal.options.disableStdin = true
@@ -433,6 +417,7 @@ function Page() {
         }}
         class="px-4 py-3 text-xs uppercase tracking-wide text-slate-400 flex items-center justify-between gap-4">
         <span>Session {sessionLabel()}</span>
+        <ExtraKeyboard />
       </footer>
     </main>
   )

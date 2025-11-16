@@ -93,7 +93,8 @@ export class TerminalManager {
     if (!element) throw new Error('Terminal element is required')
 
     this.#terminal.open(element)
-    element.xterm = this.#terminal
+    // @ts-expect-error
+    window.xterm = this.#terminal
 
     this.#terminal.loadAddon(this.#webglAddon)
     this.#terminal.loadAddon(this.#fitAddon)

@@ -30,7 +30,9 @@ export const Route = createFileRoute('/api/health')({
         const { sessionId, tabId } = payload.data
 
         const sandboxId = getOrCreateSandboxId(sessionId, tabId)
-        const sandbox = getSandbox(env.Sandbox, sandboxId, { keepAlive: true })
+        const sandbox = getSandbox(env.Sandbox, sandboxId, {
+          // keepAlive: true,
+        })
 
         try {
           await sandbox.exec('true', { timeout: HEALTH_TIMEOUT_MS })

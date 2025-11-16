@@ -34,7 +34,7 @@ async function warmupSandbox(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId, tabId }),
-      keepalive: true,
+      // keepalive: true,
     })
   } catch (error) {
     if (!recurring) {

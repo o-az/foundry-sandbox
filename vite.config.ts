@@ -1,8 +1,8 @@
+import NodePath from 'node:path'
 import NodeProcess from 'node:process'
 import { defineConfig, loadEnv } from 'vite'
 import { default as VitePluginSolid } from 'vite-plugin-solid'
 import { default as VitePluginTailwindCSS } from '@tailwindcss/vite'
-import { default as VitePluginTSConfigPaths } from 'vite-tsconfig-paths'
 import { cloudflare as VitePluginCloudflare } from '@cloudflare/vite-plugin'
 import { tanstackStart as VitePluginTanstackStart } from '@tanstack/solid-start/plugin/vite'
 
@@ -10,10 +10,12 @@ export default defineConfig(config => {
   const env = loadEnv(config.mode, NodeProcess.cwd(), '')
 
   return {
+    resolve: {
+      alias: {
+        '#': NodePath.resolve(import.meta.dirname, 'src'),
+      },
+    },
     plugins: [
-      VitePluginTSConfigPaths({
-        projects: ['./tsconfig.json'],
-      }),
       VitePluginCloudflare({
         viteEnvironment: { name: 'ssr' },
       }),

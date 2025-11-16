@@ -41,13 +41,17 @@
 
 - TypeScript/JavaScript use 2-space indentation and Biome defaults (`biome.json` governs lint + format rules).
 - Prefer descriptive camelCase for variables/functions (`sessionLabel`), PascalCase for exported types or classes (`Sandbox`), and kebab-case for file names except TypeScript modules.
-- Keep Worker handler functions pure and dependency-light; shared utilities belong in future `src/lib/` modules shared between Worker and client code.
+- Prefer named functions over arrow functions for handlers. Only if the function is very short and used inline, an arrow function is acceptable.
+between Worker and client code.
 - All `src/routes/api/*` handlers must validate and default their inputs with schemas from `zod/mini`; avoid bespoke parsing helpers or manual defaulting.
 - Run `bun check` before committing; unresolved lint errors block CI.
-- Keep TanStack route files colocated with their dependencies; prefer extracting cross-route logic into `src/lib/`.
+- Keep TanStack route files colocated with their dependencies.
+- Prefer using SolidJS APIs and [`@solid-primities`](https://github.com/solidjs-community/solid-primitives/blob/main/README.md) utilities for almost everything client-side
 
 ## Testing Guidelines
 
+- Almost never write abbreviations like `evt`, `ctx`, `req`, `res`; prefer full words for clarity.
+- Favor early returns to reduce nesting and improve readability.
 - No automated test suite exists yet. When adding features, include minimal reproduction scripts or fixture commands (e.g., sample `chisel` session transcript).
 - For browser-side changes, run `wrangler dev`, open the preview UI, and verify:
   - normal commands via `/api/exec`
@@ -65,7 +69,7 @@
 
 ## Security & Configuration Tips
 
-- Never commit secrets; Worker bindings and Foundry auth live outside the repo (`.dev.vars`, Cloudflare dashboards).
+- Never commit secrets; Worker bindings and Foundry auth live outside the repo (`.env`, Cloudflare dashboards).
 - Keep `Dockerfile` base image aligned with the SDK version specified in `package.json` to avoid runtime mismatches.
 - Interactive PTY traffic now rides over the Bun WebSocket bridge on `WS_PORT`; expose only 8080/6969 unless you intentionally proxy extra sandbox services (e.g., custom HTTP ports).
 - If you expose additional sandbox ports (anvil RPC, etc.), document the route in `AGENTS.md` and ensure `wrangler dev` preview URLs stay rate limited.

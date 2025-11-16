@@ -14,6 +14,7 @@ import { Route as ApiWsRouteImport } from './routes/api/ws'
 import { Route as ApiResetRouteImport } from './routes/api/reset'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiExecRouteImport } from './routes/api/exec'
+import { Route as ApiDestroyRouteImport } from './routes/api/destroy'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,9 +41,15 @@ const ApiExecRoute = ApiExecRouteImport.update({
   path: '/api/exec',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDestroyRoute = ApiDestroyRouteImport.update({
+  id: '/api/destroy',
+  path: '/api/destroy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
   '/api/reset': typeof ApiResetRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
   '/api/reset': typeof ApiResetRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
   '/api/reset': typeof ApiResetRoute
@@ -65,14 +74,34 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/exec' | '/api/health' | '/api/reset' | '/api/ws'
+  fullPaths:
+    | '/'
+    | '/api/destroy'
+    | '/api/exec'
+    | '/api/health'
+    | '/api/reset'
+    | '/api/ws'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/exec' | '/api/health' | '/api/reset' | '/api/ws'
-  id: '__root__' | '/' | '/api/exec' | '/api/health' | '/api/reset' | '/api/ws'
+  to:
+    | '/'
+    | '/api/destroy'
+    | '/api/exec'
+    | '/api/health'
+    | '/api/reset'
+    | '/api/ws'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/destroy'
+    | '/api/exec'
+    | '/api/health'
+    | '/api/reset'
+    | '/api/ws'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiDestroyRoute: typeof ApiDestroyRoute
   ApiExecRoute: typeof ApiExecRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiResetRoute: typeof ApiResetRoute
@@ -116,11 +145,19 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiExecRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/destroy': {
+      id: '/api/destroy'
+      path: '/api/destroy'
+      fullPath: '/api/destroy'
+      preLoaderRoute: typeof ApiDestroyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiDestroyRoute: ApiDestroyRoute,
   ApiExecRoute: ApiExecRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiResetRoute: ApiResetRoute,
