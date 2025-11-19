@@ -1,4 +1,5 @@
 import { debounce } from '@solid-primitives/scheduled'
+import { makeEventListener } from '@solid-primitives/event-listener'
 import { createFileRoute } from '@tanstack/solid-router'
 import { createSignal, onCleanup, onMount } from 'solid-js'
 
@@ -65,6 +66,8 @@ function Page() {
     let sessionBroken = false
     let recoveringSession = false
     let isRefreshing = false
+    let refreshShortcutPending = false
+    let refreshShortcutTimer: number | undefined
     let altNavigationDelegate: ((event: KeyboardEvent) => boolean) | undefined
 
     const terminal = terminalManager.init(terminalElement, {
@@ -136,8 +139,8 @@ function Page() {
       if (!isInteractiveMode()) setStatusMode('online')
     }
     const handleOffline = () => setStatusMode('offline')
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
+    makeEventListener(window, 'online', handleOnline)
+    makeEventListener(window, 'offline', handleOffline)
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'execute') {
@@ -155,7 +158,7 @@ function Page() {
         }, 200)
       }
     }
-    window.addEventListener('message', handleMessage)
+    makeEventListener(window, 'message', handleMessage)
 
     const debouncedHandleResize = debounce(() => {
       fitAddon.fit()
@@ -172,7 +175,7 @@ function Page() {
       })
     }
     resizeListener = handleResize
-    window.addEventListener('resize', resizeListener)
+    makeEventListener(window, 'resize', resizeListener)
 
     readlineApi.setCtrlCHandler(() => {
       if (isInteractiveMode() || commandInProgress) return
@@ -183,10 +186,29 @@ function Page() {
     })
 
     const handleBeforeUnload = () => {
-      markRefreshIntent()
-      isRefreshing = true
+      if (refreshShortcutPending) {
+        markRefreshIntent()
+        isRefreshing = true
+      } else {
+        isRefreshing = false
+      }
     }
-    window.addEventListener('beforeunload', handleBeforeUnload)
+    makeEventListener(window, 'beforeunload', handleBeforeUnload)
+
+    const handleRefreshShortcut = (event: KeyboardEvent) => {
+      const key = event.key
+      const isReloadShortcut =
+        key === 'F5' ||
+        (key.toLowerCase() === 'r' && (event.metaKey || event.ctrlKey))
+
+      if (!isReloadShortcut) return
+      refreshShortcutPending = true
+      if (refreshShortcutTimer) window.clearTimeout(refreshShortcutTimer)
+      refreshShortcutTimer = window.setTimeout(() => {
+        refreshShortcutPending = false
+      }, 1500)
+    }
+    makeEventListener(window, 'keydown', handleRefreshShortcut)
 
     const teardownSandbox = () => {
       if (teardownScheduled) return
@@ -224,15 +246,11 @@ function Page() {
       })
     }
 
-    window.addEventListener('pagehide', teardownSandbox, { once: true })
+    makeEventListener(window, 'pagehide', teardownSandbox, { once: true })
 
     const cleanup = () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-      window.removeEventListener('message', handleMessage)
-      window.removeEventListener('resize', resizeListener)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      window.removeEventListener('pagehide', teardownSandbox)
+      // listeners are automatically disposed by makeEventListener
+      if (refreshShortcutTimer) window.clearTimeout(refreshShortcutTimer)
       teardownSandbox()
     }
 

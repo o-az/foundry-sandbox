@@ -59,6 +59,7 @@ function RootDocument({ children }: { children: Solid.JSX.Element }) {
     <html lang="en" class="h-full">
       <head>
         <HydrationScript />
+        <title>CodeSandbox</title>
       </head>
       <body class="flex h-full min-h-screen flex-col overflow-hidden bg-[#0d1117] font-[Lilex]">
         <HeadContent />

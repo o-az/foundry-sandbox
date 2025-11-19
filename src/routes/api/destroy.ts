@@ -9,11 +9,22 @@ import { createFileRoute } from '@tanstack/solid-router'
  * this is used for cleaning up older sessions that do not have the reset endpoint.
  */
 
+const DestroyQuerySchema = z.object({
+  sessionId: z.string({ error: 'Missing sessionId' }),
+})
+
 export const Route = createFileRoute('/api/destroy')({
   server: {
     handlers: {
-      GET: async ({ params }) => {
-        const { sessionId } = params
+      GET: async ({ request }) => {
+        const url = new URL(request.url)
+        const searchParams = Object.fromEntries(url.searchParams.entries())
+        const payload = DestroyQuerySchema.safeParse(searchParams)
+
+        if (!payload.success)
+          return json({ error: payload.error.message }, { status: 400 })
+
+        const { sessionId } = payload.data
 
         const sandbox = getSandbox(env.Sandbox, sessionId)
         if (!sandbox)
@@ -22,7 +33,7 @@ export const Route = createFileRoute('/api/destroy')({
             { status: 404 },
           )
 
-        await sandbox.deleteSession(sessionId)
+        await Promise.all([sandbox.deleteSession(sessionId), sandbox.destroy()])
 
         return json({
           success: true,
@@ -31,7 +42,4 @@ export const Route = createFileRoute('/api/destroy')({
       },
     },
   },
-  params: z.object({
-    sessionId: z.string({ error: 'Missing sessionId' }),
-  }),
 })

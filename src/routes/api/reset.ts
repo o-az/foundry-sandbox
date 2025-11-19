@@ -70,7 +70,8 @@ async function handleReset({ sessionId, tabId }: ResetPayload) {
   })
 
   try {
-    await sandbox.destroy()
+    const deleteResult = await sandbox.deleteSession(sessionId)
+    console.info('Delete Result:', deleteResult)
     clearSandboxSession(sessionId)
     return json(
       { message: 'Sandbox destroyed (last tab closed)' },
