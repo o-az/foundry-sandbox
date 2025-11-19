@@ -1,5 +1,5 @@
 import { makeObjectStorage } from '@solid-primitives/storage'
-import { createServerOnlyFn } from '@tanstack/start-client-core'
+import { createServerOnlyFn } from '@tanstack/solid-start'
 
 export type SandboxRecord = {
   sandboxId: string

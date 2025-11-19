@@ -34,11 +34,16 @@ jobs:
       - name: 'Install Dependencies'
         run: bun install --frozen-lockfile
 
-      - name: 'Lint, Format & Typecheck'
-        run: |
-          bun x @biomejs/biome check .
+      - name: 'Setup Biome'
+        uses: biomejs/setup-biome@main
+        with:
+          version: 'latest'
 
-          bun tsgo --project tsconfig.json --noEmit
+      - name: 'Lint & Format'
+        run: biome ci .
+
+      - name: 'Typecheck'
+        run: bun tsgo --project tsconfig.json --noEmit
 
       - name: 'Build Worker & Workspaces'
         run: |
