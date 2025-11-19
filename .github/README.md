@@ -1,4 +1,4 @@
-<h1 align="center" style="font-size: 2.75rem; font-weight: 900; color: white;">Foundry Sandbox</h1>
+<h1 align="center" style="font-size: 2.75rem; font-weight: 900; color: white;">Code Sandbox</h1>
 
 <div align="center">
   <a

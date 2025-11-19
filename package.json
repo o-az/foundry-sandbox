@@ -1,5 +1,5 @@
 {
-  "name": "foundry-sandbox",
+  "name": "code-sandbox",
   "version": "0.0.1",
   "type": "module",
   "imports": {
@@ -66,5 +66,5 @@
   },
   "private": true,
   "license": "MIT",
-  "repository": "o-az/foundry-sandbox"
+  "repository": "o-az/code-sandbox"
 }

@@ -21,7 +21,7 @@ export const Route = createRootRoute({
     meta: [
       { charset: 'utf-8' },
       { name: 'description', content: '⌛ 📦' },
-      { name: 'keywords', content: 'foundry, web, shell' },
+      { name: 'keywords', content: 'code, web, shell' },
       {
         name: 'viewport',
         content:
