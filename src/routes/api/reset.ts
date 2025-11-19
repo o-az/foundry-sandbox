@@ -48,6 +48,12 @@ export const Route = createFileRoute('/api/reset')({
 async function handleReset({ sessionId, tabId }: ResetPayload) {
   const existingSession = readSandboxSession(sessionId)
   if (!existingSession) {
+    const sandbox = getSandbox(env.Sandbox, sessionId, {
+      // keepAlive: true,
+    })
+
+    await attemptSandboxDestroy(sandbox, sessionId)
+
     return json({ success: true, message: 'Session already destroyed' })
   }
 
@@ -69,16 +75,42 @@ async function handleReset({ sessionId, tabId }: ResetPayload) {
     // keepAlive: true,
   })
 
-  try {
-    const deleteResult = await sandbox.deleteSession(sessionId)
-    console.info('Delete Result:', deleteResult)
-    clearSandboxSession(sessionId)
+  const deleted = await attemptSandboxDestroy(sandbox, sessionId)
+  if (deleted === 'missing') {
     return json(
-      { message: 'Sandbox destroyed (last tab closed)' },
+      { message: 'Sandbox already destroyed (session missing)' },
       { status: 200 },
     )
+  }
+
+  return json(
+    { message: 'Sandbox destroyed (last tab closed)' },
+    { status: 200 },
+  )
+}
+
+async function attemptSandboxDestroy(
+  sandbox: ReturnType<typeof getSandbox>,
+  sessionId: string,
+) {
+  try {
+    await sandbox.destroy()
+    console.info('Sandbox destroyed')
+    clearSandboxSession(sessionId)
+    return 'deleted' as const
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+
+    const sessionMissing = message.toLowerCase().includes('not found')
+    if (sessionMissing) {
+      console.warn('Sandbox session already missing, clearing cache', {
+        sessionId,
+      })
+      clearSandboxSession(sessionId)
+      return 'missing' as const
+    }
+
     console.error('Failed to destroy sandbox', error)
-    return json({ message: 'Failed to destroy sandbox' }, { status: 500 })
+    throw error
   }
 }
