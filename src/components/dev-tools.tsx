@@ -12,7 +12,7 @@ export function DevTools() {
   return (
     <Show when={showDevTools()}>
       <TanStackRouterDevtools
-        position="top-right"
+        position="bottom-left"
         data-devtool-name="tanstack-router-devtools"
       />
     </Show>

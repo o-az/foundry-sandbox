@@ -2,12 +2,9 @@
 
 set -euo pipefail
 
-: "${WS_PORT:=${VITE_WS_PORT:-8080}}"
-export WS_PORT
-
-echo "[startup] launching WebSocket command server on port ${WS_PORT}..."
-bun ./websocket.ts &
+echo "[startup] Launching application server..."
+bun x vite dev --config="./vite.config.ts" &
 
 echo "[startup] starting Cloudflare Sandbox control plane..."
 
-exec bun dist/index.js
+exec bun /container-server/dist/index.js

@@ -4,7 +4,7 @@
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
-  "compatibility_date": "2025-11-09",
+  "compatibility_date": "2025-11-13",
   "main": "./src/server.ts",
   "compatibility_flags": [
     "nodejs_compat"
@@ -34,19 +34,16 @@
       ]
     }
   ],
-  "unsafe": {
-    "bindings": [
-      {
-        "name": "RATE_LIMITER",
-        "namespace_id": "1002",
-        "simple": {
-          "limit": 10,
-          "period": 60
-        },
-        "type": "ratelimit"
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 10,
+        "period": 60
       }
-    ]
-  },
+    }
+  ],
   "observability": {
     "enabled": true
   }

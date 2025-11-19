@@ -68,7 +68,8 @@
         "noDelete": "off"
       },
       "correctness": {
-        "noUnusedVariables": "off"
+        "noUnusedVariables": "off",
+        "useImportExtensions": "off"
       },
       "style": {
         "useTemplate": "off",
@@ -117,7 +118,7 @@
       "enabled": true
     },
     "parser": {
-      "cssModules": true,
+      "tailwindDirectives": true,
       "allowWrongLineComments": true
     },
     "linter": {

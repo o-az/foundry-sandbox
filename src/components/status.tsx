@@ -15,10 +15,13 @@ type StatusProps = {
 
 export function Status(props: StatusProps) {
   const style = STATUS_STYLE[props.mode]
+
   return (
     <p
-      class="top-0 right-0 m-2 absolute text-sm"
-      style={{ color: style.color }}>
+      class="top-0 right-0 m-2 absolute text-sm font-mono z-1000"
+      style={{
+        color: style.color,
+      }}>
       {style.text} · {props.message}
     </p>
   )

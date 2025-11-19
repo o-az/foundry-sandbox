@@ -258,7 +258,7 @@ export function ExtraKeyboard(props: ExtraKeyboardProps) {
               <button
                 type="button"
                 onClick={() => handleSpecialKey(item.value)}
-                class="flex h-6 min-w-[2.5rem] items-center justify-center rounded-[2px] bg-[#1f2933] px-3 text-[11px] font-semibold tracking-wide text-white transition duration-150 hover:bg-[#2b3642] active:scale-95 active:bg-[#11151a]">
+                class="flex h-6 min-w-10 items-center justify-center rounded-xs bg-[#1f2933] px-3 text-[11px] font-semibold tracking-wide text-white transition duration-150 hover:bg-[#2b3642] active:scale-95 active:bg-[#11151a]">
                 {item.label}
               </button>
             )}

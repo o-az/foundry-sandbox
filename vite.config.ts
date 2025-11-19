@@ -1,22 +1,21 @@
-import NodePath from 'node:path'
 import NodeProcess from 'node:process'
 import { defineConfig, loadEnv } from 'vite'
+import VitePluginTSConfigPaths from 'vite-tsconfig-paths'
 import { default as VitePluginSolid } from 'vite-plugin-solid'
 import { default as VitePluginTailwindCSS } from '@tailwindcss/vite'
 import { cloudflare as VitePluginCloudflare } from '@cloudflare/vite-plugin'
+import { devtools as VitePluginTanstackDevtools } from '@tanstack/devtools-vite'
 import { tanstackStart as VitePluginTanstackStart } from '@tanstack/solid-start/plugin/vite'
 
 export default defineConfig(config => {
   const env = loadEnv(config.mode, NodeProcess.cwd(), '')
 
   return {
-    resolve: {
-      alias: {
-        '#': NodePath.resolve(import.meta.dirname, 'src'),
-      },
-    },
     plugins: [
+      VitePluginTanstackDevtools(),
+      VitePluginTSConfigPaths(),
       VitePluginCloudflare({
+        configPath: './wrangler.json',
         viteEnvironment: { name: 'ssr' },
       }),
       VitePluginTailwindCSS(),
@@ -32,18 +31,9 @@ export default defineConfig(config => {
     },
     build: {
       target: 'esnext',
-      emptyOutDir: true,
-      rolldownOptions: {
-        output: {
-          cleanDir: true,
-          minify: {
-            compress:
-              config.mode === 'production'
-                ? { dropConsole: true, dropDebugger: true }
-                : undefined,
-          },
-        },
-      },
+    },
+    esbuild: {
+      drop: ['console', 'debugger'],
     },
   }
 })

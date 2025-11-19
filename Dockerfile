@@ -7,19 +7,23 @@ ENV FOUNDRY_DISABLE_NIGHTLY_WARNING=1
 ENV NODE_OPTIONS="npm_config_yes=true"
 
 RUN apt-get update --yes \
-  && apt-get install --yes --no-install-recommends vim-tiny \
   && rm -rf /var/lib/apt/lists/*
 
-
-RUN ls -la
 RUN npm install --global \
   @foundry-rs/cast@nightly \
   @foundry-rs/forge@nightly \
   @foundry-rs/anvil@nightly \
   @foundry-rs/chisel@nightly
 
-ENV WS_PORT=8080
+WORKDIR /workspace/app
 
-EXPOSE ${WS_PORT}
-EXPOSE 6969
-EXPOSE 42044
+COPY package.json bun.lock bunfig.toml /workspace/app/
+RUN bun install --frozen-lockfile
+
+COPY . /workspace/app/
+
+RUN chmod +x /workspace/app/scripts/startup.sh
+
+EXPOSE 6969 8080
+
+CMD ["/workspace/app/scripts/startup.sh"]

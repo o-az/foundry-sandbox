@@ -47,11 +47,11 @@
   },
 
   "search.exclude": {
-    ".git": true,
-    "dist": true,
+    ".git/**": true,
+    "**/dist/**": true,
     "**/_/**": true,
-    "bun.lock": true,
-    "node_modules": true,
+    "**/bun.lock": true,
+    "**/node_modules/**": true,
     "**/.tanstack/**": true,
     "**/routeTree.gen.ts": true
   },

@@ -8,13 +8,13 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root.tsx'
-import { Route as IndexRouteImport } from './routes/index.tsx'
-import { Route as ApiWsRouteImport } from './routes/api/ws.ts'
-import { Route as ApiResetRouteImport } from './routes/api/reset.ts'
-import { Route as ApiHealthRouteImport } from './routes/api/health.ts'
-import { Route as ApiExecRouteImport } from './routes/api/exec.ts'
-import { Route as ApiDestroyRouteImport } from './routes/api/destroy.ts'
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiWsRouteImport } from './routes/api/ws'
+import { Route as ApiResetRouteImport } from './routes/api/reset'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiExecRouteImport } from './routes/api/exec'
+import { Route as ApiDestroyRouteImport } from './routes/api/destroy'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',

@@ -23,8 +23,8 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "resolvePackageJsonImports": true,
     "resolvePackageJsonExports": true,
+    "resolvePackageJsonImports": true,
     "allowImportingTsExtensions": true
   },
   "include": [
