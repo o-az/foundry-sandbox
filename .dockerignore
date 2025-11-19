@@ -3,11 +3,15 @@
 
 # except for
 !./src/**/*
-!./scripts/startup.sh
-
+!./public/**/*
+!./scripts/**/*
 !./package.json
 !./wrangler.json
 !./Dockerfile
-!./gitignore
-!./dockerignore
+!./.gitignore
+!./.dockerignore
 !./bun.lock
+!./bunfig.toml
+!./tsconfig.json
+!./vite.config.ts
+!./.env

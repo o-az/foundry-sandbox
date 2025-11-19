@@ -1,5 +1,5 @@
 {
-  "$schema": "https://esm.sh/@biomejs/biome@2.3.5/configuration_schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.6/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -51,6 +51,10 @@
     "bracketSpacing": true
   },
   "linter": {
+    "domains": {
+      "solid": "all",
+      "project": "all"
+    },
     "enabled": true,
     "rules": {
       "recommended": true,
@@ -58,13 +62,15 @@
         "noBannedTypes": "off",
         "noStaticOnlyClass": "off",
         "noImportantStyles": "off",
+        "noUselessFragments": "off",
         "noUselessConstructor": "off"
       },
       "performance": {
         "noDelete": "off"
       },
       "correctness": {
-        "noUnusedVariables": "off"
+        "noUnusedVariables": "off",
+        "useImportExtensions": "off"
       },
       "style": {
         "useTemplate": "off",
@@ -113,7 +119,7 @@
       "enabled": true
     },
     "parser": {
-      "cssModules": true,
+      "tailwindDirectives": true,
       "allowWrongLineComments": true
     },
     "linter": {

@@ -4,16 +4,11 @@
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
-  "main": "./src/index.ts",
-  "compatibility_date": "2025-10-25",
+  "compatibility_date": "2025-11-13",
+  "main": "./src/server.ts",
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "assets": {
-    "binding": "Web",
-    "directory": "./src/content",
-    "html_handling": "auto-trailing-slash"
-  },
   "durable_objects": {
     "bindings": [
       {
@@ -39,19 +34,16 @@
       ]
     }
   ],
-  "unsafe": {
-    "bindings": [
-      {
-        "name": "RATE_LIMITER",
-        "namespace_id": "1002",
-        "simple": {
-          "limit": 10,
-          "period": 60
-        },
-        "type": "ratelimit"
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 10,
+        "period": 60
       }
-    ]
-  },
+    }
+  ],
   "observability": {
     "enabled": true
   }
