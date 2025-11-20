@@ -57,7 +57,7 @@ function AppShell() {
 
 function RootDocument({ children }: { children: Solid.JSX.Element }) {
   return (
-    <html lang="en" class="h-full">
+    <html lang="en" class="h-full bg-[#0d1117] min-size-max">
       <head>
         <HydrationScript />
         <title>CodeSandbox</title>
