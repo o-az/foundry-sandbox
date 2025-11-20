@@ -2,7 +2,7 @@ export const htmlCodeSnippet = /* html */ `
 <script type="module">
   const command = 'npx --yes cowsay@latest "mooo"'
 
-  const iframeElement = document.querySelector('iframe#code-sandbox')
+  const iframeElement = document.querySelector('iframe#sandbox')
   const params = new URLSearchParams({
     embed: 'true',
     cmd: encodeURIComponent(command)
@@ -19,9 +19,9 @@ export const htmlCodeSnippet = /* html */ `
 
 <iframe
   width="100%"
+  id="sandbox"
   height="100%"
   title="Sandbox"
-  id="code-sandbox"
 />
 `
 
