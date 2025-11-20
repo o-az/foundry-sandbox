@@ -33,7 +33,7 @@
     "./src/**/*.tsx"
   ],
   "files": [
-    "env.d.ts",
+    "wasm.d.ts",
     "reset.d.ts",
     "vite.config.ts",
     "worker-configuration.d.ts"
