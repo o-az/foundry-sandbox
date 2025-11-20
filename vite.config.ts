@@ -1,5 +1,6 @@
 import NodeProcess from 'node:process'
 import { defineConfig, loadEnv } from 'vite'
+import VitePluginInfo from 'unplugin-info/vite'
 import VitePluginTSConfigPaths from 'vite-tsconfig-paths'
 import { default as VitePluginSolid } from 'vite-plugin-solid'
 import { default as VitePluginTailwindCSS } from '@tailwindcss/vite'
@@ -13,6 +14,10 @@ export default defineConfig(config => {
   return {
     plugins: [
       VitePluginTanstackDevtools({ removeDevtoolsOnBuild: true }),
+      VitePluginInfo({
+        cloudflare: true,
+        github: 'https://github.com/o-az/sandbox',
+      }),
       VitePluginTSConfigPaths(),
       VitePluginCloudflare({
         configPath: './wrangler.json',

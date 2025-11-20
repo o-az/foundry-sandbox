@@ -62,7 +62,7 @@ function RootDocument({ children }: { children: Solid.JSX.Element }) {
         <HydrationScript />
         <title>CodeSandbox</title>
       </head>
-      <body class="flex h-full min-h-screen flex-col overflow-hidden bg-[#0d1117] font-[Lilex]">
+      <body class="antialiased flex h-full min-h-screen flex-col overflow-hidden bg-[#0d1117] font-[Lilex] text-[#c9d1d9]">
         <HeadContent />
         {children}
         <DevTools />

@@ -10,6 +10,7 @@
     ],
     "types": [
       "vite/client",
+      "unplugin-info/client",
       "typed-query-selector/strict"
     ],
     "resolveJsonModule": true,
@@ -32,6 +33,7 @@
     "./src/**/*.tsx"
   ],
   "files": [
+    "env.d.ts",
     "reset.d.ts",
     "vite.config.ts",
     "worker-configuration.d.ts"
