@@ -66,7 +66,7 @@ function CopyButton(props: { onCopy: () => MaybePromise<void> }) {
         <Match when={!isCopied()}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="size-4.5"
+            class="size-4.5 text-zinc-300/90"
             viewBox="0 0 24 24">
             <title>Copy to Clipboard</title>
             <g
@@ -84,7 +84,7 @@ function CopyButton(props: { onCopy: () => MaybePromise<void> }) {
         <Match when={isCopied()}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="size-5 text-green-300"
+            class="size-5 text-green-300/90"
             viewBox="0 0 24 24">
             <title>check</title>
             <path
@@ -121,7 +121,7 @@ function RouteComponent() {
           Sandbox Embed Demo
         </h1>
         <div class="relative">
-          <div class="absolute top-0 right-0 mt-2 mr-1 size-6">
+          <div class="absolute top-0 right-0 mt-2 size-6">
             <CopyButton onCopy={copyHighlightedSnippet} />
           </div>
           <article

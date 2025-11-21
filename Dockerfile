@@ -12,3 +12,15 @@ RUN apt-get update --yes \
 COPY --from=ghcr.io/foundry-rs/foundry:latest /usr/local/bin/anvil /usr/local/bin/anvil
 COPY --from=ghcr.io/foundry-rs/foundry:latest /usr/local/bin/forge /usr/local/bin/forge
 COPY --from=ghcr.io/foundry-rs/foundry:latest /usr/local/bin/cast /usr/local/bin/cast
+COPY --from=ghcr.io/foundry-rs/foundry:latest /usr/local/bin/chisel /usr/local/bin/chisel
+
+COPY scripts/websocket.ts scripts/startup.sh /container-server/scripts/
+RUN chmod +x /container-server/scripts/websocket.ts /container-server/scripts/startup.sh
+
+ENV WS_PORT=8080
+
+EXPOSE ${WS_PORT} 6969
+
+WORKDIR /container-server
+
+CMD ["/container-server/scripts/startup.sh"]

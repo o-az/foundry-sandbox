@@ -8,7 +8,7 @@
         ],
         "experimental": {
           "classRegex": [
-            "[cls|class|className]\\s\\:\\=\\s\"([^\"]*)"
+            "[cls|class|className|classList]\\s\\:\\=\\s\"([^\"]*)"
           ]
         }
       }

@@ -1,5 +1,7 @@
 import { createMemo } from 'solid-js'
 
+const TODO = true
+
 export type StatusMode = 'online' | 'interactive' | 'error' | 'offline'
 
 export const STATUS_STYLE: Record<StatusMode, { text: string; color: string }> =
@@ -17,6 +19,8 @@ type StatusProps = {
 
 export function Status(props: StatusProps) {
   const style = createMemo(() => STATUS_STYLE[props.mode])
+
+  if (TODO) return null
 
   return (
     <p
