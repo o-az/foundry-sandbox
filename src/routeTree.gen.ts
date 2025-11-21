@@ -9,7 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as DocsRouteImport } from './routes/docs'
+import { Route as DocsRouteRouteImport } from './routes/docs/route'
 import { Route as DemoRouteRouteImport } from './routes/demo/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWsRouteImport } from './routes/api/ws'
@@ -19,7 +19,7 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiExecRouteImport } from './routes/api/exec'
 import { Route as ApiDestroyRouteImport } from './routes/api/destroy'
 
-const DocsRoute = DocsRouteImport.update({
+const DocsRouteRoute = DocsRouteRouteImport.update({
   id: '/docs',
   path: '/docs',
   getParentRoute: () => rootRouteImport,
@@ -68,7 +68,7 @@ const ApiDestroyRoute = ApiDestroyRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/demo': typeof DemoRouteRoute
-  '/docs': typeof DocsRoute
+  '/docs': typeof DocsRouteRoute
   '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
@@ -79,7 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/demo': typeof DemoRouteRoute
-  '/docs': typeof DocsRoute
+  '/docs': typeof DocsRouteRoute
   '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
@@ -91,7 +91,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/demo': typeof DemoRouteRoute
-  '/docs': typeof DocsRoute
+  '/docs': typeof DocsRouteRoute
   '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
@@ -138,7 +138,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DemoRouteRoute: typeof DemoRouteRoute
-  DocsRoute: typeof DocsRoute
+  DocsRouteRoute: typeof DocsRouteRoute
   ApiDestroyRoute: typeof ApiDestroyRoute
   ApiExecRoute: typeof ApiExecRoute
   ApiHealthRoute: typeof ApiHealthRoute
@@ -153,7 +153,7 @@ declare module '@tanstack/solid-router' {
       id: '/docs'
       path: '/docs'
       fullPath: '/docs'
-      preLoaderRoute: typeof DocsRouteImport
+      preLoaderRoute: typeof DocsRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo': {
@@ -218,7 +218,7 @@ declare module '@tanstack/solid-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DemoRouteRoute: DemoRouteRoute,
-  DocsRoute: DocsRoute,
+  DocsRouteRoute: DocsRouteRoute,
   ApiDestroyRoute: ApiDestroyRoute,
   ApiExecRoute: ApiExecRoute,
   ApiHealthRoute: ApiHealthRoute,
