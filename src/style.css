@@ -161,6 +161,10 @@ input[type="number"] {
   background-color: transparent !important;
 }
 
+.xterm {
+  padding: 8px;
+}
+
 .xterm-viewport,
 .xterm-scrollable-element {
   background-color: #0d1117 !important;
@@ -180,11 +184,6 @@ pre.shiki code {
   min-width: 100%;
   overflow-x: auto;
 }
-
-/* pre.shiki code::selection {
-  background-color: hsl(308, 96%, 81%);
-  color: hsl(232, 30%, 21%);
-} */
 
 @media (min-width: 768px) {
   pre.shiki {

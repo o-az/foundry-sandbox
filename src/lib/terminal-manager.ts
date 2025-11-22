@@ -46,7 +46,7 @@ export class TerminalManager {
       fontFamily: 'Lilex, monospace',
       theme: {
         background: '#0d1117',
-        foreground: '#c9d1d9',
+        foreground: '#f0f6fc',
         cursor: '#58a6ff',
         black: '#484f58',
         red: '#ff7b72',

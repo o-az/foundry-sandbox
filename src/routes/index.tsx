@@ -431,12 +431,14 @@ function Page() {
       <header class="relative">
         <Status mode={statusMode()} message={statusMessage()} />
       </header>
-      <div id="terminal-container" class="flex-1 overflow-hidden bg-[#0d1117]">
+      <div
+        id="terminal-container"
+        class="scroll-smooth flex-1 overflow-x-hidden bg-[#0d1117]">
         <div
           id="terminal"
           data-element="terminal"
           ref={terminalRef}
-          class="h-full w-full"
+          class="size-full scroll-smooth"
         />
       </div>
       <footer

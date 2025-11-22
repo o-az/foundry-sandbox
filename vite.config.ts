@@ -1,7 +1,6 @@
 import NodeProcess from 'node:process'
 import { defineConfig, loadEnv } from 'vite'
 import VitePluginInfo from 'unplugin-info/vite'
-// import VitePluginInspect from 'vite-plugin-inspect'
 import VitePluginTSConfigPaths from 'vite-tsconfig-paths'
 import { default as VitePluginSolid } from 'vite-plugin-solid'
 import { default as VitePluginTailwindCSS } from '@tailwindcss/vite'
@@ -15,7 +14,6 @@ export default defineConfig(config => {
   return {
     plugins: [
       VitePluginTanstackDevtools({ removeDevtoolsOnBuild: true }),
-      // VitePluginInspect(),
       VitePluginInfo({
         cloudflare: true,
         github: 'https://github.com/o-az/sandbox',
@@ -31,12 +29,7 @@ export default defineConfig(config => {
         server: { entry: './src/server.ts' },
         client: { entry: './src/client.ts' },
       }),
-      VitePluginSolid({
-        ssr: true,
-        babel: {
-          plugins: [['@locator/babel-jsx/dist', { env: 'development' }]],
-        },
-      }),
+      VitePluginSolid({ ssr: true }),
     ],
     server: {
       port: Number(env.PORT || randomIntInclusive(3_100, 8_100)),
