@@ -17,6 +17,11 @@
   font-display: swap;
 }
 
+::selection {
+  background-color: hsl(308, 96%, 81%);
+  color: hsl(232, 30%, 21%);
+}
+
 :root {
   --keyboard-height: 0px;
 }
@@ -159,4 +164,35 @@ input[type="number"] {
 .xterm-viewport,
 .xterm-scrollable-element {
   background-color: #0d1117 !important;
+}
+
+pre.shiki {
+  padding: 16px 16px 10px;
+  overflow-x: auto;
+  width: 100%;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+pre.shiki code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  overflow-x: auto;
+}
+
+/* pre.shiki code::selection {
+  background-color: hsl(308, 96%, 81%);
+  color: hsl(232, 30%, 21%);
+} */
+
+@media (min-width: 768px) {
+  pre.shiki {
+    max-width: 650px;
+    width: fit-content;
+  }
+}
+
+pre.has-focused .line:not(.focused) {
+  @apply blur-[2px];
 }

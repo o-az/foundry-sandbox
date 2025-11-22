@@ -26,11 +26,11 @@ export type InteractiveSessionAPI = {
 export function createInteractiveSession({
   terminal,
   serializeAddon,
+  sessionId,
   setStatus,
   onSessionExit,
-  sessionId,
-  logLevel = 'info',
-  wsEndpoint = '/api/ws',
+  logLevel = 'debug',
+  wsEndpoint = window.location.origin,
 }: InteractiveSessionOptions): InteractiveSessionAPI {
   let interactiveSocket: WebSocket | undefined
   let interactiveMode = false
@@ -67,20 +67,23 @@ export function createInteractiveSession({
   function openInteractiveSocket() {
     const url = websocketUrl(wsEndpoint, sessionId)
     const socket = new WebSocket(url)
+
     socket.binaryType = 'arraybuffer'
     interactiveSocket = socket
+
     socket.addEventListener('open', () => {
       sendInteractiveJson({
         type: 'init',
-        cols: terminal.cols ?? 120,
-        rows: terminal.rows ?? 32,
+        cols: terminal.cols,
+        rows: terminal.rows,
       })
-      if (interactiveInitQueued) {
-        setTimeout(() => {
-          sendInteractiveInput(interactiveInitQueued)
-          interactiveInitQueued = ''
-        }, 100)
-      }
+
+      if (!interactiveInitQueued) return
+
+      setTimeout(() => {
+        sendInteractiveInput(interactiveInitQueued)
+        interactiveInitQueued = ''
+      }, 100)
     })
     socket.addEventListener('message', handleInteractiveMessage)
     socket.addEventListener('close', () => resetInteractiveState('online'))
@@ -187,9 +190,10 @@ export function createInteractiveSession({
   }
 }
 
-function websocketUrl(endpoint: string, sessionId: string) {
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const host = window.location.host
-  const search = new URLSearchParams({ sessionId }).toString()
-  return `${protocol}://${host}${endpoint}?${search}`
+function websocketUrl(wsEndpoint: string, sessionId: string) {
+  const base = new URL(wsEndpoint)
+  base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:'
+  base.pathname = '/api/ws'
+  base.search = `sessionId=${encodeURIComponent(sessionId)}`
+  return base.toString()
 }

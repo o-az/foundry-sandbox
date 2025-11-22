@@ -10,9 +10,9 @@ import * as Solid from 'solid-js'
 import { HydrationScript } from 'solid-js/web'
 
 import appCss from '#style.css?url'
-import { DevTools } from '#components/dev-tools.tsx'
 import xtermCss from '@xterm/xterm/css/xterm.css?url'
 import { SessionProvider } from '#context/session.tsx'
+import { DevTools, useDevTools } from '#components/dev-tools.tsx'
 import { DefaultCatchBoundary } from '#components/default-catch-boundary.tsx'
 
 export const Route = createRootRoute({
@@ -44,6 +44,8 @@ export const Route = createRootRoute({
 })
 
 function AppShell() {
+  useDevTools()
+
   return (
     <SessionProvider>
       <Solid.Suspense>
@@ -55,12 +57,12 @@ function AppShell() {
 
 function RootDocument({ children }: { children: Solid.JSX.Element }) {
   return (
-    <html lang="en" class="h-full">
+    <html lang="en" class="h-full bg-[#0d1117] min-size-max">
       <head>
         <HydrationScript />
-        <title>CodeSandbox</title>
+        <title>Sandbox</title>
       </head>
-      <body class="flex h-full min-h-screen flex-col overflow-hidden bg-[#0d1117] font-[Lilex]">
+      <body class="antialiased flex h-full min-h-screen flex-col overflow-hidden bg-[#0d1117] font-[Lilex] text-[#c9d1d9]">
         <HeadContent />
         {children}
         <DevTools />

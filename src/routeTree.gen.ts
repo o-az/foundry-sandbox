@@ -9,13 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DocsRouteRouteImport } from './routes/docs/route'
+import { Route as DemoRouteRouteImport } from './routes/demo/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWsRouteImport } from './routes/api/ws'
+import { Route as ApiVersionRouteImport } from './routes/api/version'
 import { Route as ApiResetRouteImport } from './routes/api/reset'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiExecRouteImport } from './routes/api/exec'
 import { Route as ApiDestroyRouteImport } from './routes/api/destroy'
 
+const DocsRouteRoute = DocsRouteRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoRouteRoute = DemoRouteRouteImport.update({
+  id: '/demo',
+  path: '/demo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -24,6 +37,11 @@ const IndexRoute = IndexRouteImport.update({
 const ApiWsRoute = ApiWsRouteImport.update({
   id: '/api/ws',
   path: '/api/ws',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiVersionRoute = ApiVersionRouteImport.update({
+  id: '/api/version',
+  path: '/api/version',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiResetRoute = ApiResetRouteImport.update({
@@ -49,67 +67,102 @@ const ApiDestroyRoute = ApiDestroyRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/demo': typeof DemoRouteRoute
+  '/docs': typeof DocsRouteRoute
   '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
   '/api/reset': typeof ApiResetRoute
+  '/api/version': typeof ApiVersionRoute
   '/api/ws': typeof ApiWsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/demo': typeof DemoRouteRoute
+  '/docs': typeof DocsRouteRoute
   '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
   '/api/reset': typeof ApiResetRoute
+  '/api/version': typeof ApiVersionRoute
   '/api/ws': typeof ApiWsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/demo': typeof DemoRouteRoute
+  '/docs': typeof DocsRouteRoute
   '/api/destroy': typeof ApiDestroyRoute
   '/api/exec': typeof ApiExecRoute
   '/api/health': typeof ApiHealthRoute
   '/api/reset': typeof ApiResetRoute
+  '/api/version': typeof ApiVersionRoute
   '/api/ws': typeof ApiWsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/demo'
+    | '/docs'
     | '/api/destroy'
     | '/api/exec'
     | '/api/health'
     | '/api/reset'
+    | '/api/version'
     | '/api/ws'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/demo'
+    | '/docs'
     | '/api/destroy'
     | '/api/exec'
     | '/api/health'
     | '/api/reset'
+    | '/api/version'
     | '/api/ws'
   id:
     | '__root__'
     | '/'
+    | '/demo'
+    | '/docs'
     | '/api/destroy'
     | '/api/exec'
     | '/api/health'
     | '/api/reset'
+    | '/api/version'
     | '/api/ws'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DemoRouteRoute: typeof DemoRouteRoute
+  DocsRouteRoute: typeof DocsRouteRoute
   ApiDestroyRoute: typeof ApiDestroyRoute
   ApiExecRoute: typeof ApiExecRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiResetRoute: typeof ApiResetRoute
+  ApiVersionRoute: typeof ApiVersionRoute
   ApiWsRoute: typeof ApiWsRoute
 }
 
 declare module '@tanstack/solid-router' {
   interface FileRoutesByPath {
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -122,6 +175,13 @@ declare module '@tanstack/solid-router' {
       path: '/api/ws'
       fullPath: '/api/ws'
       preLoaderRoute: typeof ApiWsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/version': {
+      id: '/api/version'
+      path: '/api/version'
+      fullPath: '/api/version'
+      preLoaderRoute: typeof ApiVersionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/reset': {
@@ -157,10 +217,13 @@ declare module '@tanstack/solid-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DemoRouteRoute: DemoRouteRoute,
+  DocsRouteRoute: DocsRouteRoute,
   ApiDestroyRoute: ApiDestroyRoute,
   ApiExecRoute: ApiExecRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiResetRoute: ApiResetRoute,
+  ApiVersionRoute: ApiVersionRoute,
   ApiWsRoute: ApiWsRoute,
 }
 export const routeTree = rootRouteImport
@@ -168,7 +231,6 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/solid-start'
 declare module '@tanstack/solid-start' {
   interface Register {
     ssr: true

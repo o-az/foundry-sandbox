@@ -442,7 +442,9 @@ function Page() {
       <footer
         id="footer"
         class="flex items-center justify-between gap-4 pl-1 text-[10px] uppercase tracking-wide text-white/10 hover:text-white">
-        <span>{sessionLabel()}</span>
+        <span class="hidden" data-todo="true">
+          {sessionLabel()}
+        </span>
         <ExtraKeyboard
           onVirtualKey={event => {
             const { key, modifiers } = event.detail
