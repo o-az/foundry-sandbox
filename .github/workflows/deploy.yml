@@ -53,7 +53,7 @@ jobs:
           bun run build
           bun x wrangler@latest \
             --config='./dist/server/wrangler.json' deploy \
-            --keep-vars
+            --keep-vars \
             --var 'ENVIRONMENT:production'
 
       - name: 'Job Summary'
