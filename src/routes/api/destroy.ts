@@ -5,12 +5,16 @@ import { getSandbox } from '@cloudflare/sandbox'
 import { createFileRoute } from '@tanstack/solid-router'
 
 /**
- * given a sandbox session id, destroy it.
- * this is used for cleaning up older sessions that do not have the reset endpoint.
+ * Given a sandbox ID, destroy the entire sandbox container.
+ * This is used for cleaning up older sandboxes that do not have the reset endpoint.
+ *
+ * Note: Per Cloudflare Sandbox docs, the default session cannot be deleted -
+ * use sandbox.destroy() to tear down the entire container instead.
+ * @see https://developers.cloudflare.com/sandbox/concepts/sessions/
  */
 
 const DestroyQuerySchema = z.object({
-  sessionId: z.string({ error: 'Missing sessionId' }),
+  sandboxId: z.string({ error: 'Missing sandboxId' }),
 })
 
 export const Route = createFileRoute('/api/destroy')({
@@ -24,16 +28,17 @@ export const Route = createFileRoute('/api/destroy')({
         if (!payload.success)
           return json({ error: payload.error.message }, { status: 400 })
 
-        const { sessionId } = payload.data
+        const { sandboxId } = payload.data
 
-        const sandbox = getSandbox(env.Sandbox, sessionId)
+        const sandbox = getSandbox(env.Sandbox, sandboxId)
         if (!sandbox)
           return json(
-            { error: `Sandbox with sessionId ${sessionId} not found` },
+            { error: `Sandbox with ID ${sandboxId} not found` },
             { status: 404 },
           )
 
-        await Promise.all([sandbox.deleteSession(sessionId), sandbox.destroy()])
+        // destroy() tears down the entire container including all sessions
+        await sandbox.destroy()
 
         return json({
           success: true,

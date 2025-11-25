@@ -4,22 +4,35 @@ import { writeClipboard } from '@solid-primitives/clipboard'
 import { transformerNotationFocus } from '@shikijs/transformers'
 import { batch, createSignal, Match, onMount, Switch } from 'solid-js'
 import { createOnigurumaEngine, loadWasm } from 'shiki/engine/oniguruma'
-import { createHighlighterCore, type ThemeRegistration } from 'shiki/core'
+import {
+  createHighlighterCore,
+  type HighlighterCore,
+  type ThemeRegistration,
+} from 'shiki/core'
 
 import { theme } from './-data/theme.ts'
 import type { MaybePromise } from '#lib/types.ts'
 import { htmlCodeSnippet } from './-data/snippets.ts'
 
+let cachedHighlighter: HighlighterCore | null = null
+
+async function getHighlighter(): Promise<HighlighterCore> {
+  if (cachedHighlighter) return cachedHighlighter
+
+  await loadWasm(import('shiki/onig.wasm'))
+
+  cachedHighlighter = await createHighlighterCore({
+    themes: [import('@shikijs/themes/houston')],
+    langs: [import('@shikijs/langs/tsx'), import('@shikijs/langs/html')],
+    engine: createOnigurumaEngine(await import('shiki/wasm')),
+  })
+
+  return cachedHighlighter
+}
+
 const generateCode = createServerFn({ method: 'GET' }).handler(async () => {
   try {
-    await loadWasm(import('shiki/onig.wasm'))
-
-    const highlighter = await createHighlighterCore({
-      themes: [import('@shikijs/themes/houston')],
-      langs: [import('@shikijs/langs/tsx'), import('@shikijs/langs/html')],
-
-      engine: createOnigurumaEngine(await import('shiki/wasm')),
-    })
+    const highlighter = await getHighlighter()
 
     return highlighter.codeToHtml(htmlCodeSnippet.trimStart(), {
       lang: 'html',
