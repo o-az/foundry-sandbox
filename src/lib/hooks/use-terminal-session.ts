@@ -181,10 +181,15 @@ export function useTerminalSession({
     )
   }
 
-  // Resize handling
+  // Use term.onResize for PTY notification (xterm.js demo best practice)
+  // This fires whenever terminal dimensions actually change, more reliable than window resize
+  terminal.onResize(({ cols, rows }) => {
+    notifyResize({ cols, rows })
+  })
+
+  // Window resize triggers fit(), which may trigger term.onResize if dimensions change
   const debouncedHandleResize = debounce(() => {
     fitAddon.fit()
-    notifyResize({ cols: terminal.cols, rows: terminal.rows })
   }, 400)
 
   makeEventListener(window, 'resize', () => {

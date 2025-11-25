@@ -13,11 +13,19 @@ import { spawn, type IPty } from 'node-pty'
 const [DEFAULT_COLS, DEFAULT_ROWS] = [120, 32]
 const DEFAULT_SHELL = '/bin/bash --norc --noprofile'
 
+// Buffer settings for output batching (from xterm.js demo best practices)
+const BUFFER_TIMEOUT_MS = 3
+const BUFFER_MAX_SIZE = 262_144 // 256KB
+
 type PtySession = {
   id: string
   pty: IPty
   cols: number
   rows: number
+  // Output buffering state
+  outputBuffer: string
+  flushTimer: ReturnType<typeof setTimeout> | null
+  userInputPending: boolean
 }
 
 type SessionState =
@@ -90,12 +98,15 @@ const ws = crossws({
         return
       }
 
+      // Mark user input pending for immediate response flushing
+      state.session.userInputPending = true
       state.session.pty.write(data)
     },
 
     close(peer, details) {
       const state = sessions.get(peer)
       if (state?.status === 'ready') {
+        if (state.session.flushTimer) clearTimeout(state.session.flushTimer)
         state.session.pty.kill()
       }
       console.info('[pty] connection closed', {
@@ -110,6 +121,7 @@ const ws = crossws({
       console.error('[pty] connection error', error)
       const state = sessions.get(peer)
       if (state?.status === 'ready') {
+        if (state.session.flushTimer) clearTimeout(state.session.flushTimer)
         state.session.pty.kill()
       }
       sessions.delete(peer)
@@ -169,21 +181,62 @@ function spawnPty(
     } as Record<string, string>,
   })
 
-  // Forward PTY output to WebSocket
+  const session: PtySession = {
+    id: sessionId,
+    pty,
+    cols,
+    rows,
+    outputBuffer: '',
+    flushTimer: null,
+    userInputPending: false,
+  }
+
+  // Flush buffered output to WebSocket
+  function flushOutput() {
+    if (session.outputBuffer.length === 0) return
+    if (peer.readyState === 1) peer.send(session.outputBuffer)
+
+    session.outputBuffer = ''
+    if (session.flushTimer) {
+      clearTimeout(session.flushTimer)
+      session.flushTimer = null
+    }
+  }
+
+  // Buffered output handler (from xterm.js demo best practices)
+  // Flushes immediately on user input or when buffer exceeds max size
+  // Otherwise batches output for better performance
   pty.onData((data: string) => {
-    if (peer.readyState === 1) peer.send(data)
+    session.outputBuffer += data
+
+    // Flush immediately if user just typed or buffer is large
+    if (
+      session.userInputPending ||
+      session.outputBuffer.length > BUFFER_MAX_SIZE
+    ) {
+      session.userInputPending = false
+      flushOutput()
+      return
+    }
+
+    // Schedule flush if not already scheduled
+    if (!session.flushTimer) {
+      session.flushTimer = setTimeout(flushOutput, BUFFER_TIMEOUT_MS)
+    }
   })
 
   // Handle PTY exit
   pty.onExit(({ exitCode, signal }) => {
     console.info('[pty] process exited', { sessionId, exitCode, signal })
+    // Flush any remaining output before closing
+    flushOutput()
     if (peer.readyState === 1) {
       peer.send(JSON.stringify({ type: 'process-exit', exitCode, signal }))
       peer.close(1000, 'process exited')
     }
   })
 
-  return { id: sessionId, pty, cols, rows }
+  return session
 }
 
 function resizePty(session: PtySession, cols: number, rows: number): void {

@@ -57,6 +57,8 @@ export class TerminalManager {
         background: '#0d1117',
         foreground: '#f0f6fc',
         cursor: '#58a6ff',
+        selectionBackground: '#58a6ff33',
+        selectionInactiveBackground: '#58a6ff22',
         black: '#484f58',
         red: '#ff7b72',
         green: '#3fb950',
