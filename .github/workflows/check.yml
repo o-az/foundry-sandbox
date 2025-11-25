@@ -46,5 +46,4 @@ jobs:
         run: bun tsgo --project tsconfig.json --noEmit
 
       - name: 'Build Worker & Workspaces'
-        run: |
-          bun run build
+        run: bun run build

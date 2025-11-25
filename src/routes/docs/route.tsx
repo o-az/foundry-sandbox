@@ -1,56 +1,50 @@
-import { createServerFn } from '@tanstack/solid-start'
-import { createFileRoute } from '@tanstack/solid-router'
-import { writeClipboard } from '@solid-primitives/clipboard'
-import { transformerNotationFocus } from '@shikijs/transformers'
-import { createSignal, Match, onMount, Switch } from 'solid-js'
-import { createOnigurumaEngine, loadWasm } from 'shiki/engine/oniguruma'
 import {
-  createHighlighterCore,
   type HighlighterCore,
+  createHighlighterCore,
   type ThemeRegistration,
 } from 'shiki/core'
+import { createFileRoute } from '@tanstack/solid-router'
+import { writeClipboard } from '@solid-primitives/clipboard'
+import { createSignal, Match, onMount, Switch } from 'solid-js'
+import { transformerNotationFocus } from '@shikijs/transformers'
+import { createOnigurumaEngine, loadWasm } from 'shiki/engine/oniguruma'
 
 import { theme } from './-data/theme.ts'
 import { htmlCodeSnippet } from './-data/snippets.ts'
+
+const ONIG_WASM_CDN = 'https://esm.sh/shiki/onig.wasm'
 
 let cachedHighlighter: HighlighterCore | null = null
 
 async function getHighlighter(): Promise<HighlighterCore> {
   if (cachedHighlighter) return cachedHighlighter
 
-  await loadWasm(import('shiki/onig.wasm'))
+  await loadWasm(fetch(ONIG_WASM_CDN))
 
   cachedHighlighter = await createHighlighterCore({
     themes: [import('@shikijs/themes/houston')],
     langs: [import('@shikijs/langs/tsx'), import('@shikijs/langs/html')],
-    engine: createOnigurumaEngine(await import('shiki/wasm')),
+    engine: createOnigurumaEngine(() => fetch(ONIG_WASM_CDN)),
   })
 
   return cachedHighlighter
 }
 
-const generateCode = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    const highlighter = await getHighlighter()
+async function highlightCode(): Promise<string> {
+  const highlighter = await getHighlighter()
 
-    return highlighter.codeToHtml(htmlCodeSnippet.trimStart(), {
-      lang: 'html',
-      transformers: [transformerNotationFocus()],
-      theme: theme as ThemeRegistration,
-    })
-  } catch (error) {
-    console.info('error in serverfn')
-    console.error(error)
-  }
-})
+  return highlighter.codeToHtml(htmlCodeSnippet.trimStart(), {
+    lang: 'html',
+    transformers: [transformerNotationFocus()],
+    theme: theme as ThemeRegistration,
+  })
+}
 
 export const Route = createFileRoute('/docs')({
   component: RouteComponent,
-  loader: () => generateCode(),
 })
 
 function RouteComponent() {
-  const code = Route.useLoaderData()
   const [codeElement, setCodeElement] = createSignal<
     (HTMLElement & { setHTMLUnsafe?: (value: string) => void }) | undefined
   >()
@@ -60,9 +54,20 @@ function RouteComponent() {
     await writeClipboard(text)
   }
 
-  onMount(() => {
-    if (code() && typeof code() === 'string')
-      codeElement()?.setHTMLUnsafe?.(`${code()}`)
+  onMount(async () => {
+    try {
+      const html = await highlightCode()
+      codeElement()?.setHTMLUnsafe?.(html)
+    } catch (error) {
+      console.error('Failed to highlight code:', error)
+      // Fallback to plain text
+      const element = codeElement()
+      if (element) {
+        element.textContent = htmlCodeSnippet.trim()
+        element.style.whiteSpace = 'pre'
+        element.style.fontFamily = 'monospace'
+      }
+    }
   })
 
   return (

@@ -5,6 +5,7 @@ import VitePluginInfo from 'unplugin-info/vite'
 import VitePluginInspect from 'vite-plugin-inspect'
 import VitePluginTSConfigPaths from 'vite-tsconfig-paths'
 import { default as VitePluginSolid } from 'vite-plugin-solid'
+import VitePluginDevtoolsJson from 'vite-plugin-devtools-json'
 import { default as VitePluginTailwindCSS } from '@tailwindcss/vite'
 import { cloudflare as VitePluginCloudflare } from '@cloudflare/vite-plugin'
 import { devtools as VitePluginTanstackDevtools } from '@tanstack/devtools-vite'
@@ -14,6 +15,7 @@ export default defineConfig(config => {
   const env = loadEnv(config.mode, NodeProcess.cwd(), '')
 
   const plugins = [
+    VitePluginDevtoolsJson(),
     VitePluginTanstackDevtools({ removeDevtoolsOnBuild: true }),
     VitePluginInfo({
       cloudflare: true,

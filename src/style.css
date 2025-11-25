@@ -23,6 +23,8 @@
 
 :root {
   --keyboard-height: 0px;
+  --font-display: Lilex, system-ui, sans-serif;
+  --font-mono: Lilex, monospace;
 }
 
 @custom-variant dark {
@@ -179,6 +181,7 @@ pre.shiki {
   width: 100%;
   min-width: 100%;
   box-sizing: border-box;
+  font-family: Lilex, monospace;
 }
 
 pre.shiki code {
