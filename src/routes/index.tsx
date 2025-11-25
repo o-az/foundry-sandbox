@@ -34,19 +34,17 @@ export const Route = createFileRoute('/')({
 
 function Page() {
   const {
-    ensureClientSession,
     markRefreshIntent,
+    ensureClientSession,
     consumeRefreshIntent,
     clearStoredSessionState,
   } = useSession()
-  const [statusMode, setStatusMode] = createSignal<StatusMode>('offline')
   const [sessionLabel, setSessionLabel] = createSignal('')
   const [statusMessage, setStatusMessage] = createSignal('Ready')
+  const [statusMode, setStatusMode] = createSignal<StatusMode>('offline')
 
   let terminalRef: HTMLDivElement | undefined
-  let virtualKeyboardBridge:
-    | ReturnType<typeof createVirtualKeyboardBridge>
-    | undefined
+  let virtualKeyboardBridge: ReturnType<typeof createVirtualKeyboardBridge>
 
   onMount(() => {
     const session = ensureClientSession()
@@ -390,9 +388,7 @@ function Page() {
         setStatusMessage('Ready')
         return
       }
-      if (normalized === 'reset') {
-        void resetSandboxSession()
-      }
+      if (normalized === 'reset') void resetSandboxSession()
     }
 
     function displayError(message: string) {
@@ -438,7 +434,7 @@ function Page() {
       }
 
       clearStoredSessionState()
-      setTimeout(() => window.location.reload(), 500)
+      setTimeout(() => void window.location.reload(), 500)
     }
   })
 

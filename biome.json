@@ -59,6 +59,9 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "nursery": {
+        "noFloatingPromises": "error"
+      },
       "complexity": {
         "noBannedTypes": "off",
         "noStaticOnlyClass": "off",

@@ -16,7 +16,7 @@ const HealthRequestSchema = z.object({
 export const Route = createFileRoute('/api/health')({
   server: {
     handlers: {
-      GET: async () => new Response('ok', { status: 200 }),
+      GET: () => new Response('ok', { status: 200 }),
       POST: async ({ request }) => {
         const body = await request.json()
         const payload = HealthRequestSchema.safeParse(body)

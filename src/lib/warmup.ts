@@ -5,7 +5,7 @@ export function startSandboxWarmup({
   sessionId,
   tabId,
   onWarmupFailure,
-  intervalMs = 4 * 60 * 1000,
+  intervalMs = 4 * 60 * 1_000,
   skipImmediate = false,
 }: {
   sessionId: string
@@ -27,7 +27,9 @@ export function startSandboxWarmup({
     void warmupSandbox(sessionId, tabId, true, onWarmupFailure)
   }, intervalMs)
 
-  return () => window.clearInterval(timer)
+  return () => {
+    window.clearInterval(timer)
+  }
 }
 
 async function warmupSandbox(

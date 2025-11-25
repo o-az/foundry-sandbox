@@ -127,7 +127,6 @@ export class TerminalManager {
     this.#terminal.loadAddon(this.#xtermReadline)
 
     this.#terminal.attachCustomKeyEventHandler(event => {
-      console.info('custom key event', event)
       // Ctrl + Left Arrow (beginning of line)
       if (
         event.ctrlKey &&
@@ -135,7 +134,7 @@ export class TerminalManager {
         event.type === 'keydown'
       ) {
         this.#terminal.write('\x01') // Ctrl+A (ASCII SOH)
-        return false // Prevent default xterm.js handling
+        return false
       }
       // Ctrl + Right Arrow (end of line)
       if (
@@ -144,15 +143,15 @@ export class TerminalManager {
         event.type === 'keydown'
       ) {
         this.#terminal.write('\x05') // Ctrl+E (ASCII ENQ)
-        return false // Prevent default xterm.js handling
-      }
-      return true // Allow other key events to be handled normally
-    })
-
-    this.#terminal.attachCustomKeyEventHandler(event => {
-      if (typeof onAltNavigation === 'function' && onAltNavigation(event))
         return false
+      }
 
+      // Alt navigation callback
+      if (typeof onAltNavigation === 'function' && onAltNavigation(event)) {
+        return false
+      }
+
+      // Ctrl+Meta+C handling
       if (
         event.type === 'keydown' &&
         event.key === 'c' &&
@@ -161,6 +160,7 @@ export class TerminalManager {
       ) {
         return false
       }
+
       return true
     })
 
@@ -191,6 +191,15 @@ export class TerminalManager {
 
   dispose() {
     if (!this.#initialized) return
+    this.#webglAddon?.dispose()
+    this.#fitAddon.dispose()
+    this.#searchAddon.dispose()
+    this.#clipboardAddon.dispose()
+    this.#unicode11Addon.dispose()
+    this.#serializeAddon.dispose()
+    this.#ligaturesAddon.dispose()
+    this.#webLinksAddon.dispose()
+    this.#imageAddon.dispose()
     this.#terminal.dispose()
     this.#initialized = false
   }
@@ -203,7 +212,7 @@ export class TerminalManager {
 
     try {
       await document.fonts.ready
-      void document.fonts.load('17px Lilex')
+      await document.fonts.load('17px Lilex')
     } catch {
       // Ignore font load errors
     }

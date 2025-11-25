@@ -37,15 +37,15 @@ export function initKeyboardInsets() {
     viewport.addEventListener('scroll', handleViewportChange)
     window.addEventListener('focus', handleViewportChange, true)
 
-    cleanup.push(() =>
-      viewport.removeEventListener('resize', handleViewportChange),
-    )
-    cleanup.push(() =>
-      viewport.removeEventListener('scroll', handleViewportChange),
-    )
-    cleanup.push(() =>
-      window.removeEventListener('focus', handleViewportChange, true),
-    )
+    cleanup.push(() => {
+      viewport.removeEventListener('resize', handleViewportChange)
+    })
+    cleanup.push(() => {
+      viewport.removeEventListener('scroll', handleViewportChange)
+    })
+    cleanup.push(() => {
+      window.removeEventListener('focus', handleViewportChange, true)
+    })
 
     handleViewportChange()
   }
@@ -65,12 +65,12 @@ export function initKeyboardInsets() {
     }
 
     virtualKeyboard.addEventListener('geometrychange', handleGeometryChange)
-    cleanup.push(() =>
+    cleanup.push(() => {
       virtualKeyboard.removeEventListener(
         'geometrychange',
         handleGeometryChange,
-      ),
-    )
+      )
+    })
 
     handleGeometryChange()
   }
@@ -82,7 +82,9 @@ export function initKeyboardInsets() {
   }
 
   window.addEventListener('pagehide', resetInset)
-  cleanup.push(() => window.removeEventListener('pagehide', resetInset))
+  cleanup.push(() => {
+    window.removeEventListener('pagehide', resetInset)
+  })
 
   applyInset()
 

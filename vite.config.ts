@@ -34,10 +34,11 @@ export default defineConfig(config => {
     VitePluginSolid({ ssr: true }),
   ]
 
-  if (env.PLUGIN_INSPECT === 'true')
-    plugins.unshift(VitePluginInspect({ build: true }))
-
-  if (env.PLUGIN_SONDA === 'true') plugins.unshift([VitePluginSonda()])
+  if (config.mode === 'development') {
+    if (env.PLUGIN_SONDA === 'true') plugins.unshift([VitePluginSonda()])
+    if (env.PLUGIN_INSPECT === 'true')
+      plugins.unshift(VitePluginInspect({ build: true }))
+  }
 
   return {
     plugins,

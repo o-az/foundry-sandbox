@@ -22,6 +22,13 @@ export type SandboxExecResult = {
   code?: number
 }
 
+export type StreamEvent =
+  | { type: 'stdout'; data: string }
+  | { type: 'stderr'; data: string }
+  | { type: 'error'; error: string }
+  | { type: 'complete'; exitCode: number }
+  | { type: 'start' }
+
 export function createCommandRunner({
   sessionId,
   terminal,
@@ -75,7 +82,10 @@ export function createCommandRunner({
     }
   }
 
-  function consumeSseBuffer(buffer: string, callback: (chunk: any) => void) {
+  function consumeSseBuffer(
+    buffer: string,
+    callback: (chunk: StreamEvent) => void,
+  ) {
     let working = buffer
     while (true) {
       const marker = working.indexOf('\n\n')
@@ -89,7 +99,7 @@ export function createCommandRunner({
         .join('\n')
       if (!data) continue
       try {
-        callback(JSON.parse(data))
+        callback(JSON.parse(data) as StreamEvent)
       } catch (error) {
         console.warn('Failed to parse SSE event', error)
       }
@@ -97,36 +107,31 @@ export function createCommandRunner({
     return working
   }
 
-  function handleStreamEvent(event: any) {
-    const type = typeof event?.type === 'string' ? event.type : undefined
-    if (!type) return
-
-    if (type === 'stdout' && typeof event.data === 'string') {
+  function handleStreamEvent(event: StreamEvent) {
+    if (event.type === 'stdout') {
       terminal.write(event.data)
       return
     }
 
-    if (type === 'stderr' && typeof event.data === 'string') {
+    if (event.type === 'stderr') {
       terminal.write(`\u001b[31m${event.data}\u001b[0m`)
       return
     }
 
-    if (type === 'error') {
-      const message =
-        typeof event.error === 'string' ? event.error : 'Stream error'
-      displayError(message)
+    if (event.type === 'error') {
+      displayError(event.error)
       setStatus('error')
       return
     }
 
-    if (type === 'complete') {
-      const code =
-        typeof event.exitCode === 'number' ? event.exitCode : 'unknown'
-      if (code !== 0) terminal.writeln(`\r\n[process exited with code ${code}]`)
+    if (event.type === 'complete') {
+      if (event.exitCode !== 0) {
+        terminal.writeln(`\r\n[process exited with code ${event.exitCode}]`)
+      }
       return
     }
 
-    if (type === 'start') setStatus('online')
+    if (event.type === 'start') setStatus('online')
   }
 
   async function parseJsonResponse(

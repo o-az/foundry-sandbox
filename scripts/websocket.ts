@@ -3,8 +3,8 @@
 import { randomUUID } from 'node:crypto'
 
 import { App } from 'uWebSockets.js'
-import { spawn, type IPty } from 'node-pty'
 import crossws from 'crossws/adapters/uws'
+import { spawn, type IPty } from 'node-pty'
 
 /**
  * WebSocket-based PTY bridge using node-pty + crossws + uWebSockets.js
@@ -203,7 +203,7 @@ function parseControlMessage(raw: string): ControlMessage | undefined {
   return undefined
 }
 
-const port = Number(process.env.WS_PORT || 8080)
+const port = Number(process.env.WS_PORT || 80_80)
 
 const server = App()
   .ws('/*', ws.websocket)

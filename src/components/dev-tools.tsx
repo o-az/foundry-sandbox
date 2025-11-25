@@ -5,7 +5,9 @@ export function useDevTools() {
 
   onMount(() => {
     if (import.meta.env.DEV)
-      void import('eruda').then(({ default: eruda }) => eruda.init())
+      void import('eruda').then(({ default: eruda }) => {
+        eruda.init()
+      })
   })
 }
 

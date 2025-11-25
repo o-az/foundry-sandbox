@@ -30,8 +30,10 @@ export function createInteractiveSession({
   setStatus,
   onSessionExit,
   logLevel = 'debug',
-  wsEndpoint = window.location.origin,
+  wsEndpoint,
 }: InteractiveSessionOptions): InteractiveSessionAPI {
+  const resolvedWsEndpoint =
+    wsEndpoint ?? (typeof window !== 'undefined' ? window.location.origin : '')
   let interactiveSocket: WebSocket | undefined
   let interactiveMode = false
   let interactiveInitQueued = ''
@@ -65,7 +67,7 @@ export function createInteractiveSession({
   }
 
   function openInteractiveSocket() {
-    const url = websocketUrl(wsEndpoint, sessionId)
+    const url = websocketUrl(resolvedWsEndpoint, sessionId)
     const socket = new WebSocket(url)
 
     socket.binaryType = 'arraybuffer'
@@ -194,6 +196,6 @@ function websocketUrl(wsEndpoint: string, sessionId: string) {
   const base = new URL(wsEndpoint)
   base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:'
   base.pathname = '/api/ws'
-  base.search = `sessionId=${encodeURIComponent(sessionId)}`
+  base.searchParams.set('sessionId', sessionId)
   return base.toString()
 }
