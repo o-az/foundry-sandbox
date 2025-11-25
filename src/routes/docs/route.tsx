@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/solid-start'
 import { createFileRoute } from '@tanstack/solid-router'
 import { writeClipboard } from '@solid-primitives/clipboard'
 import { transformerNotationFocus } from '@shikijs/transformers'
-import { batch, createSignal, Match, onMount, Switch } from 'solid-js'
+import { createSignal, Match, onMount, Switch } from 'solid-js'
 import { createOnigurumaEngine, loadWasm } from 'shiki/engine/oniguruma'
 import {
   createHighlighterCore,
@@ -11,7 +11,6 @@ import {
 } from 'shiki/core'
 
 import { theme } from './-data/theme.ts'
-import type { MaybePromise } from '#lib/types.ts'
 import { htmlCodeSnippet } from './-data/snippets.ts'
 
 let cachedHighlighter: HighlighterCore | null = null
@@ -56,10 +55,10 @@ function RouteComponent() {
     (HTMLElement & { setHTMLUnsafe?: (value: string) => void }) | undefined
   >()
 
-  const copyHighlightedSnippet = async () =>
-    await writeClipboard(
-      codeElement()?.textContent?.trim() ?? htmlCodeSnippet.trim(),
-    )
+  const copySnippet = async () => {
+    const text = codeElement()?.textContent?.trim() ?? htmlCodeSnippet.trim()
+    await writeClipboard(text)
+  }
 
   onMount(() => {
     if (code() && typeof code() === 'string')
@@ -82,12 +81,12 @@ function RouteComponent() {
           </a>{' '}
           🌐
         </h2>
-        <div class="bg-[#171F2B] w-full flex justify-center sm:max-w-[620px] max-w-full">
+        <div class="relative bg-[#171F2B] w-full sm:max-w-[620px] max-w-full rounded-sm">
+          <CopyButton onCopy={copySnippet} />
           <article
             ref={setCodeElement}
             data-element="iframe-code-block"
-            // show a light border on hover
-            class="text-sm self-center shrink-0 w-full sm:max-w-[620px] max-w-full rounded-sm"
+            class="text-sm w-full rounded-sm"
           />
         </div>
       </div>
@@ -95,30 +94,25 @@ function RouteComponent() {
   )
 }
 
-function CopyButton(props: { onCopy: () => MaybePromise<void> }) {
+function CopyButton(props: { onCopy: () => Promise<void> }) {
   const [isCopied, setIsCopied] = createSignal(false)
 
-  const handleCopy = async () =>
-    batch(async () => [
-      await props.onCopy(),
-      setIsCopied(true),
-      setTimeout(() => setIsCopied(false), 2_000),
-    ])
+  const handleCopy = async () => {
+    await props.onCopy()
+    setIsCopied(true)
+    setTimeout(() => setIsCopied(false), 2000)
+  }
 
   return (
     <button
       onClick={handleCopy}
       type="button"
-      classList={{
-        'border-red-400': isCopied(),
-        'border-green-400': !isCopied(),
-      }}
-      class="rounded-sm transition-colors duration-200">
+      class="absolute top-2 right-2 p-1.5 rounded-md hover:bg-white/10 transition-colors duration-200">
       <Switch>
         <Match when={!isCopied()}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="size-4.5 text-zinc-300/90"
+            class="size-4 text-zinc-400 hover:text-zinc-200"
             viewBox="0 0 24 24">
             <title>Copy to Clipboard</title>
             <g
@@ -132,13 +126,12 @@ function CopyButton(props: { onCopy: () => MaybePromise<void> }) {
             </g>
           </svg>
         </Match>
-
         <Match when={isCopied()}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="size-5 text-green-300/90"
+            class="size-4 text-green-400"
             viewBox="0 0 24 24">
-            <title>check</title>
+            <title>Copied!</title>
             <path
               fill="currentColor"
               d="M9 16.17L4.83 12l-1.42 1.41L9 19L21 7l-1.41-1.41z"

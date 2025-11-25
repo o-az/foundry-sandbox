@@ -70,7 +70,9 @@ export function createCommandRunner({
     }
 
     const finalChunk = textDecoder.decode()
-    consumeSseBuffer(finalChunk, handleStreamEvent)
+    if (buffer || finalChunk) {
+      consumeSseBuffer(buffer + finalChunk, handleStreamEvent)
+    }
   }
 
   function consumeSseBuffer(buffer: string, callback: (chunk: any) => void) {

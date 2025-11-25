@@ -9,13 +9,6 @@ import crossws from 'crossws/adapters/uws'
 /**
  * WebSocket-based PTY bridge using node-pty + crossws + uWebSockets.js
  * Used for interactive commands (REPLs, chisel, node, etc.)
- *
- * node-pty provides a true PTY with:
- * - Native resize (SIGWINCH) - no echo artifacts
- * - Proper terminal capabilities
- * - Full escape sequence support
- *
- * uWebSockets.js provides high-performance WebSocket handling
  */
 
 const [DEFAULT_COLS, DEFAULT_ROWS] = [120, 32]
