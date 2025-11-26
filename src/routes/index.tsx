@@ -41,6 +41,9 @@ function Page() {
   const [prefilledCommand, setPrefilledCommand] = createSignal<string | null>(
     null,
   )
+  const [getTerminalHtml, setGetTerminalHtml] = createSignal<
+    (() => string) | null
+  >(null)
 
   let terminalRef: HTMLDivElement | undefined
   let virtualKeyboardBridge:
@@ -77,6 +80,12 @@ function Page() {
     })
 
     virtualKeyboardBridge = terminalSession.virtualKeyboardBridge
+
+    // Expose terminal HTML serialization for sharing
+    setGetTerminalHtml(() => () => {
+      const { serializeAddon } = terminalSession.terminalManager
+      return serializeAddon.serializeAsHTML({ includeGlobalBackground: true })
+    })
   })
 
   return (
@@ -86,9 +95,13 @@ function Page() {
       <header class="relative">
         <Status mode={statusMode()} message={statusMessage()} />
         <div class="absolute top-1 right-1 z-50">
-          <ShareButton prefilledCommand={prefilledCommand()} />
+          <ShareButton
+            prefilledCommand={prefilledCommand()}
+            getTerminalHtml={getTerminalHtml()}
+          />
         </div>
       </header>
+
       <div
         id="terminal-container"
         class="min-h-0 flex-1 overflow-hidden bg-[#0d1117]">

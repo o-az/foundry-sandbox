@@ -46,6 +46,7 @@ export function createCommandRunner({
     })
 
     const payload = await parseJsonResponse(response)
+    terminal.write('\r\n')
     renderExecResult(payload)
   }
 
@@ -131,7 +132,10 @@ export function createCommandRunner({
       return
     }
 
-    if (event.type === 'start') setStatus('online')
+    if (event.type === 'start') {
+      terminal.write('\r\n')
+      setStatus('online')
+    }
   }
 
   async function parseJsonResponse(

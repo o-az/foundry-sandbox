@@ -32,6 +32,7 @@ export const Route = createFileRoute('/api/exec')({
           const result = await sandbox.exec(command, {
             timeout: DEFAULT_TIMEOUT_MS,
             env: {
+              CLICOLOR: '1',
               FORCE_COLOR: '3',
               TERM: 'xterm-256color',
               COLORTERM: 'truecolor',

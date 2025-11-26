@@ -41,7 +41,7 @@ export class TerminalManager {
     this.#terminal = new Terminal({
       fontSize: 17,
       lineHeight: 1.2,
-      scrollback: 5000,
+      scrollback: 5_000,
       convertEol: true,
       cursorBlink: true,
       allowProposedApi: true,

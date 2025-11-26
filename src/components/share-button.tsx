@@ -1,21 +1,45 @@
-import { createSignal } from 'solid-js'
+import { createSignal, Show } from 'solid-js'
 import { writeClipboard } from '@solid-primitives/clipboard'
+
+import { useEmbedDetector } from '#components/embed-detector.tsx'
 
 type ShareButtonProps = {
   prefilledCommand?: string | null
+  getTerminalHtml?: (() => string) | null
   class?: string
+}
+
+async function compressAndEncode(input: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(input)
+
+  const cs = new CompressionStream('gzip')
+  const writer = cs.writable.getWriter()
+  writer.write(data)
+  writer.close()
+
+  const compressedArrayBuffer = await new Response(cs.readable).arrayBuffer()
+  const compressedBytes = new Uint8Array(compressedArrayBuffer)
+
+  // Convert to base64url (URL-safe base64)
+  let binary = ''
+  for (const byte of compressedBytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 export function ShareButton(props: ShareButtonProps) {
   const [copied, setCopied] = createSignal(false)
+  const embed = useEmbedDetector()
 
-  function getLastCommandFromHistory(): string {
+  function getLastCommandFromHistory() {
     try {
       const historyJson = localStorage.getItem('history')
+
       if (!historyJson) return ''
       const history: unknown = JSON.parse(historyJson)
       if (!Array.isArray(history) || history.length === 0) return ''
-      const firstItem = history[0]
+      const firstItem = history.at(0)
+
       if (typeof firstItem !== 'string') return ''
       return firstItem.trim()
     } catch {
@@ -23,7 +47,7 @@ export function ShareButton(props: ShareButtonProps) {
     }
   }
 
-  function getCommand(): string {
+  function getCommand() {
     const lastCommand = getLastCommandFromHistory()
     if (lastCommand) return lastCommand
     return props.prefilledCommand?.trim() || ''
@@ -33,12 +57,27 @@ export function ShareButton(props: ShareButtonProps) {
     const command = getCommand()
     if (!command) return
 
-    const url = new URL(window.location.origin)
+    const url = new URL(window.location.origin + '/command')
     url.searchParams.set('cmd', command)
-    url.searchParams.set('embed', 'true')
+
+    // If we have terminal HTML, compress and encode it
+    if (props.getTerminalHtml) {
+      try {
+        const html = props.getTerminalHtml()
+        const encoded = await compressAndEncode(html)
+        // Only include if under ~6KB to avoid URL length issues (browsers support ~8KB)
+        if (encoded.length < 6000) url.searchParams.set('o', encoded)
+        else
+          console.info(
+            `Output too large to embed (${encoded.length} chars), will run fresh`,
+          )
+      } catch (error) {
+        console.warn('Failed to encode terminal output:', error)
+      }
+    }
 
     try {
-      await writeClipboard(url.toString().replaceAll('/?', '?'))
+      await writeClipboard(url.toString())
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
@@ -47,13 +86,15 @@ export function ShareButton(props: ShareButtonProps) {
   }
 
   return (
-    <button
-      type="button"
-      title="Share command"
-      onClick={handleClick}
-      class={`flex items-center bg-[#0c0f15]/90 px-2.5 py-1.5 text-xs uppercase tracking-wide text-white/70 transition hover:border-white/25 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#58a6ff] ${props.class ?? ''}`}>
-      {copied() ? <CheckIcon /> : <ShareIcon />}
-    </button>
+    <Show when={!embed()}>
+      <button
+        type="button"
+        title="Share command"
+        onClick={handleClick}
+        class={`flex items-center bg-[#0c0f15]/90 px-2.5 py-1.5 text-xs uppercase tracking-wide text-white/70 transition hover:border-white/25 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#58a6ff] ${props.class ?? ''}`}>
+        {copied() ? <CheckIcon /> : <ShareIcon />}
+      </button>
+    </Show>
   )
 }
 

@@ -82,6 +82,8 @@ export function useTerminalSession({
   let isRefreshing = false
   let refreshShortcutPending = false
   let refreshShortcutTimer: number | undefined
+  let inputLoopReady = false
+  let pendingEmbedExecute = false
 
   // Initialize terminal
   let altNavigationDelegate: ((event: KeyboardEvent) => boolean) | undefined
@@ -92,12 +94,6 @@ export function useTerminalSession({
   const fitAddon = terminalManager.fitAddon
   const xtermReadline = terminalManager.readline
   const serializeAddon = terminalManager.serializeAddon
-
-  const readlineApi = xtermReadline as unknown as {
-    read: (prompt: string) => Promise<string>
-    println: (line: string) => void
-    setCtrlCHandler: (handler: () => void) => void
-  }
 
   // Command runner
   const { runCommand } = createCommandRunner({
@@ -202,9 +198,9 @@ export function useTerminalSession({
   })
 
   // Ctrl+C handler
-  readlineApi.setCtrlCHandler(() => {
+  xtermReadline.setCtrlCHandler(() => {
     if (state.isInteractiveMode() || state.isCommandInProgress()) return
-    readlineApi.println('^C')
+    xtermReadline.println('^C')
     state.actions.setIdle()
     startInputLoop()
   })
@@ -288,7 +284,7 @@ export function useTerminalSession({
     awaitingInput = true
     state.actions.setAwaitingInput()
 
-    readlineApi
+    xtermReadline
       .read(prompt)
       .then(async rawCommand => {
         awaitingInput = false
@@ -309,7 +305,12 @@ export function useTerminalSession({
   }
 
   function handlePrefilledCommand() {
-    if (hasPrefilledCommand || !session.prefilledCommand) return
+    if (hasPrefilledCommand || !session.prefilledCommand) {
+      // No prefilled command, mark ready immediately
+      inputLoopReady = true
+      processPendingEmbedExecute()
+      return
+    }
     hasPrefilledCommand = true
 
     setTimeout(() => {
@@ -324,6 +325,10 @@ export function useTerminalSession({
         terminal.options.disableStdin = true
       }
 
+      // Mark ready after prefilled command is pasted
+      inputLoopReady = true
+      processPendingEmbedExecute()
+
       if (session.autoRun) {
         setTimeout(() => {
           dispatchEnterKey()
@@ -334,6 +339,13 @@ export function useTerminalSession({
 
   function executeEmbedCommand() {
     if (!session.embedMode) return
+
+    // If the input loop isn't ready yet, queue the execution for later
+    if (!inputLoopReady) {
+      pendingEmbedExecute = true
+      return
+    }
+
     terminal.options.disableStdin = false
     dispatchEnterKey()
     setTimeout(() => {
@@ -341,11 +353,36 @@ export function useTerminalSession({
     }, 200)
   }
 
+  function processPendingEmbedExecute() {
+    if (!pendingEmbedExecute) return
+    pendingEmbedExecute = false
+    // Small delay to ensure everything is settled
+    setTimeout(() => executeEmbedCommand(), 50)
+  }
+
   function dispatchEnterKey() {
+    // Use xterm.js internal API to trigger data event directly
+    // This is more reliable than synthetic keyboard events which may be blocked
+    const core = (
+      terminal as unknown as {
+        _core?: {
+          coreService?: {
+            triggerDataEvent(data: string, wasUserInput?: boolean): void
+          }
+        }
+      }
+    )._core
+    if (core?.coreService?.triggerDataEvent) {
+      core.coreService.triggerDataEvent('\r', true)
+      return
+    }
+
+    // Fallback to synthetic keyboard event (less reliable but worth trying)
     const enterEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
       code: 'Enter',
       bubbles: true,
+      cancelable: true,
     })
     terminal.textarea?.dispatchEvent(enterEvent)
   }
