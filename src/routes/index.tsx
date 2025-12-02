@@ -36,8 +36,8 @@ function Page() {
   } = useSession()
 
   const [sessionLabel, setSessionLabel] = createSignal('')
-  const [statusMode, setStatusMode] = createSignal<StatusMode>('offline')
   const [statusMessage, setStatusMessage] = createSignal('Ready')
+  const [statusMode, setStatusMode] = createSignal<StatusMode>('offline')
   const [prefilledCommand, setPrefilledCommand] = createSignal<string | null>(
     null,
   )
@@ -45,7 +45,7 @@ function Page() {
     (() => string) | null
   >(null)
 
-  let terminalRef: HTMLDivElement | undefined
+  let terminalRef!: HTMLDivElement
   let virtualKeyboardBridge:
     | ReturnType<typeof createVirtualKeyboardBridge>
     | undefined
@@ -107,9 +107,9 @@ function Page() {
         class="min-h-0 flex-1 overflow-hidden bg-[#0d1117]">
         <div
           id="terminal"
-          data-element="terminal"
           ref={terminalRef}
           class="size-full"
+          data-element="terminal"
         />
       </div>
       <footer

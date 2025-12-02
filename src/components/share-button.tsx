@@ -1,12 +1,16 @@
 import { createSignal, Show } from 'solid-js'
 import { writeClipboard } from '@solid-primitives/clipboard'
 
+import {
+  applyCommandParams,
+  type CommandUrlParams,
+} from '#lib/url/command-search.ts'
 import { useEmbedDetector } from '#components/embed-detector.tsx'
 
 type ShareButtonProps = {
+  class?: string
   prefilledCommand?: string | null
   getTerminalHtml?: (() => string) | null
-  class?: string
 }
 
 async function compressAndEncode(input: string): Promise<string> {
@@ -24,7 +28,11 @@ async function compressAndEncode(input: string): Promise<string> {
   // Convert to base64url (URL-safe base64)
   let binary = ''
   for (const byte of compressedBytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return btoa(binary)
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '')
+    .trim()
 }
 
 export function ShareButton(props: ShareButtonProps) {
@@ -58,16 +66,18 @@ export function ShareButton(props: ShareButtonProps) {
     if (!command) return
 
     const url = new URL(window.location.origin + '/command')
-    url.searchParams.set('cmd', command)
+    const commandParams: CommandUrlParams = { command }
 
     // If we have terminal HTML, compress and encode it
-    if (props.getTerminalHtml) {
+    if (props.getTerminalHtml?.()) {
       try {
         const html = props.getTerminalHtml()
         const encoded = await compressAndEncode(html)
-        // Only include if under ~6KB to avoid URL length issues (browsers support ~8KB)
-        if (encoded.length < 6000) url.searchParams.set('o', encoded)
-        else
+        // Only include if under ~8KB to avoid URL length issues (browsers support ~8KB)
+        if (encoded.length < 8_000) {
+          commandParams.encodedOutput = encoded
+          commandParams.includeHtmlSnapshot = true
+        } else
           console.info(
             `Output too large to embed (${encoded.length} chars), will run fresh`,
           )
@@ -76,10 +86,13 @@ export function ShareButton(props: ShareButtonProps) {
       }
     }
 
+    applyCommandParams(url, commandParams)
+    console.info('url', url.toString())
+
     try {
-      await writeClipboard(url.toString())
+      await writeClipboard(url.toString().replace('/?', '?'))
       setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      setTimeout(() => setCopied(false), 1_500)
     } catch {
       // Clipboard write failed, do nothing
     }

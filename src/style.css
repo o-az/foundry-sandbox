@@ -202,3 +202,8 @@ pre.shiki code {
 pre.has-focused .line:not(.focused) {
   @apply blur-[2px];
 }
+
+[data-element="command-output"] pre span {
+  /* white-space: normal; */
+  white-space-collapse: loose;
+}

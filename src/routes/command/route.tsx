@@ -4,26 +4,51 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { createFileRoute } from '@tanstack/solid-router'
 import { createSignal, onCleanup, onMount, Show } from 'solid-js'
 
+import {
+  setAutorunParam,
+  CommandSearchSchema,
+  normalizeCommandSearch,
+  clearEncodedOutputParams,
+} from '#lib/url/command-search.ts'
+
 export const Route = createFileRoute('/command')({
   component: RouteComponent,
-  validateSearch: z.object({
-    cmd: z.string().check(z.minLength(2)),
-    o: z.optional(z.string()), // compressed output
-  }),
+  validateSearch: CommandSearchSchema,
+  loaderDeps: ({ search }) => ({ search }),
+  loader: async ({ deps: { search } }) => {
+    const normalized = normalizeCommandSearch(search)
+
+    if (!normalized.encodedOutput)
+      return {
+        html: null,
+        cmd: normalized.command,
+        autorun: normalized.autorun,
+      }
+
+    const decodedHtml = await decompressAndDecode(normalized.encodedOutput)
+    const cleanedHtml = stripEmptyTerminalRows(decodedHtml)
+
+    return {
+      html: trimHtmlLines(cleanedHtml),
+      cmd: normalized.command,
+      autorun: normalized.autorun,
+    }
+  },
 })
 
 function RouteComponent() {
-  const search = Route.useSearch()
-  const { cmd, o } = search()
+  const loaderData = Route.useLoaderData()
+  const { html, cmd, autorun } = loaderData()
 
-  if (o) return <PreEncodedOutput command={cmd} encoded={o} />
+  if (html) return <PreEncodedOutput html={html} />
 
-  return <FreshCommandOutput command={cmd} />
+  return <FreshCommandOutput command={cmd} autorun={Boolean(autorun)} />
 }
 
 async function decompressAndDecode(encoded: string): Promise<string> {
   // Convert base64url back to base64
-  let base64 = encoded.replaceAll(/-/g, '+').replaceAll(/_/g, '/')
+  // console.info('encoded', encoded)
+  let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/')
   // Add padding if needed
   while (base64.length % 4) base64 += '='
 
@@ -41,56 +66,152 @@ async function decompressAndDecode(encoded: string): Promise<string> {
   return decompressed
 }
 
-function PreEncodedOutput(props: { command: string; encoded: string }) {
-  const [loading, setLoading] = createSignal(true)
-  const [showRerun, setShowRerun] = createSignal(false)
-  const [error, setError] = createSignal<string | null>(null)
-  const [htmlContent, setHtmlContent] = createSignal<string | null>(null)
+/** Trim trailing whitespace from each line to prevent excessive horizontal scrolling */
+function trimHtmlLines(html: string): string {
+  return html
+    .split('\n')
+    .map(line => line.trimEnd())
+    .join('\n')
+}
 
-  onMount(async () => {
-    try {
-      const rawHtml = await decompressAndDecode(props.encoded)
-      // Extract just the content inside <pre>...</pre>
-      const preMatch = rawHtml.match(/<pre[^>]*>([\s\S]*?)<\/pre>/)
-      const html = preMatch ? preMatch[1] : rawHtml
-      setHtmlContent(html)
-      setShowRerun(true)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setLoading(false)
+function stripEmptyTerminalRows(html: string): string {
+  // Remove div rows that only contain a single span full of whitespace/nbsp.
+  // These come from xterm serialisation padding every frame to the viewport height.
+  const emptyRowPattern =
+    /<div>\s*<span(?:\s+[^>]*)?>[\s\u00a0]*<\/span>\s*<\/div>/g
+
+  const withoutEmptyRows = html.replace(emptyRowPattern, '')
+  const trimmedRows = trimRowTrailingWhitespace(withoutEmptyRows)
+  const withoutTrailingPrompt = removeTrailingPromptRow(trimmedRows)
+  return insertCommandResultGap(withoutTrailingPrompt)
+}
+
+function trimRowTrailingWhitespace(html: string): string {
+  const rowRegex = /<div>([\s\S]*?)<\/div>/g
+
+  return html.replace(rowRegex, (fullMatch, rowContent) => {
+    if (!rowContent.trimStart().startsWith('<span')) return fullMatch
+
+    const spanRegex = /(<span(?:\s+[^>]*)?>)([\s\S]*?)<\/span>/g
+    const spans: Array<{ openTag: string; text: string }> = []
+    let match: RegExpExecArray | null
+
+    while ((match = spanRegex.exec(rowContent)) !== null) {
+      spans.push({ openTag: match[1], text: match[2] })
     }
+
+    if (!spans.length) return fullMatch
+
+    let index = spans.length - 1
+    while (index >= 0) {
+      const normalized = spans[index]!.text.replace(/\u00a0/g, ' ')
+      if (normalized.trim().length === 0) {
+        spans.pop()
+        index--
+        continue
+      }
+
+      spans[index]!.text = spans[index]!.text.replace(/[\s\u00a0]+$/, '')
+      break
+    }
+
+    if (!spans.length) return ''
+
+    const rebuilt = spans
+      .map(span => `${span.openTag}${span.text}</span>`)
+      .join('')
+
+    return `<div>${rebuilt}</div>`
+  })
+}
+
+function removeTrailingPromptRow(html: string): string {
+  const rowRegex = /<div>([\s\S]*?)<\/div>/g
+  let lastMatch: RegExpExecArray | null = null
+
+  let match: RegExpExecArray | null
+  while ((match = rowRegex.exec(html)) !== null) {
+    lastMatch = match
+  }
+
+  if (!lastMatch) return html
+
+  const textContent = lastMatch[1]
+    .replace(/<[^>]+>/g, '')
+    .replace(/\u00a0/g, ' ')
+    .trim()
+
+  if (textContent !== '$') return html
+
+  const before = html.slice(0, lastMatch.index)
+  const after = html.slice(lastMatch.index + lastMatch[0].length)
+  return before + after
+}
+
+function insertCommandResultGap(html: string): string {
+  const rowRegex = /<div>([\s\S]*?)<\/div>/g
+  const rows = Array.from(html.matchAll(rowRegex))
+
+  if (rows.length < 2) return html
+
+  const extractText = (content: string) =>
+    content.replace(/<[^>]+>/g, '').replace(/\u00a0/g, ' ')
+
+  let commandEndIndex = -1
+  for (let index = 0; index < rows.length; index++) {
+    const text = extractText(rows[index]![1]).trimEnd()
+    if (!text) continue
+    commandEndIndex = index
+    if (!text.endsWith('\\')) break
+  }
+
+  if (commandEndIndex === -1 || commandEndIndex === rows.length - 1) return html
+
+  const nextRowText = extractText(rows[commandEndIndex + 1]![1]).trim()
+  if (!nextRowText) return html
+
+  const insertionIndex =
+    (rows[commandEndIndex]!.index ?? 0) + rows[commandEndIndex]![0].length
+  const spacerRow = '<div><span> </span></div>'
+
+  return html.slice(0, insertionIndex) + spacerRow + html.slice(insertionIndex)
+}
+
+function PreEncodedOutput(props: { html: string }) {
+  const [showRerun, setShowRerun] = createSignal(false)
+
+  // Extract just the content inside <pre>...</pre>
+  const preMatch = props.html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/)
+  const htmlContent = preMatch ? preMatch[1] : props.html
+
+  onMount(() => {
+    setShowRerun(true)
   })
 
   function handleRerun() {
     // Navigate to same command without the encoded output
     const url = new URL(window.location.href)
-    url.searchParams.delete('o')
+    clearEncodedOutputParams(url)
+    setAutorunParam(url, true)
     window.location.href = url.toString()
   }
 
   return (
-    <main class="min-h-screen h-screen overflow-auto p-4">
-      <Show when={loading()}>
-        <div class="text-white/50">Loading...</div>
-      </Show>
-      <Show when={error()}>
-        <div class="text-red-500">{error()}</div>
-      </Show>
-      <Show when={htmlContent()}>
-        <pre
-          class="font-mono text-sm overflow-x-auto"
-          innerHTML={htmlContent()!}
-        />
-      </Show>
+    <main
+      class="min-h-screen h-screen overflow-auto p-4"
+      data-element="command-output">
+      <pre
+        class="font-mono text-sm overflow-x-auto tabular-nums"
+        innerHTML={htmlContent}
+      />
       <Show when={showRerun()}>
         <div class="fixed bottom-4 right-4">
           <button
             type="button"
+            aria-label="Re-run command"
             onClick={handleRerun}
-            class="flex items-center gap-2 rounded bg-[#238636] px-4 py-2 text-sm font-medium text-white hover:bg-[#2ea043] transition-colors">
+            class="inline-flex items-center justify-center rounded-md border border-[#1c6a31] bg-[#07160c] p-3 text-[#3cd878] shadow-[0_0_1px_rgba(60,216,120,0.2)] transition-colors hover:bg-[#0a1f12] hover:text-[#54f08f] hover:border-[#33c056]">
             <RerunIcon />
-            Re-run command
           </button>
         </div>
       </Show>
@@ -106,7 +227,32 @@ const ExecResultSchema = z.object({
   exitCode: z.optional(z.number()),
 })
 
-function FreshCommandOutput(props: { command: string }) {
+function FreshCommandOutput(props: { command: string; autorun: boolean }) {
+  if (!props.autorun) {
+    function handleEnableAutorun() {
+      const url = new URL(window.location.href)
+      setAutorunParam(url, true)
+      window.location.href = url.toString()
+    }
+
+    return (
+      <main class="min-h-screen h-screen overflow-auto p-4">
+        <pre class="font-mono text-sm text-white mb-4">
+          <span style="color:#3fb950">$</span> {props.command}
+        </pre>
+        <div class="fixed bottom-4 right-4">
+          <button
+            type="button"
+            aria-label="Run command"
+            onClick={handleEnableAutorun}
+            class="inline-flex items-center justify-center rounded-md border border-[#1c6a31] bg-[#07160c] p-3 text-[#3cd878] shadow-[0_0_1px_rgba(60,216,120,0.2)] transition-colors hover:bg-[#0a1f12] hover:text-[#54f08f] hover:border-[#33c056]">
+            <RerunIcon />
+          </button>
+        </div>
+      </main>
+    )
+  }
+
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
   const [htmlContent, setHtmlContent] = createSignal<string | null>(null)
@@ -115,7 +261,6 @@ function FreshCommandOutput(props: { command: string }) {
   let terminal: Terminal
   let serializeAddon: SerializeAddon | undefined
   onMount(async () => {
-    // Create a hidden terminal to render the output
     terminal = new Terminal({
       cols: 120,
       rows: 24,
@@ -133,21 +278,21 @@ function FreshCommandOutput(props: { command: string }) {
     serializeAddon = new SerializeAddon()
     terminal.loadAddon(serializeAddon)
 
-    // Create hidden container and open terminal
     const hiddenContainer = document.createElement('div')
     Object.assign(hiddenContainer, {
       style: {
         left: '-9999px',
         position: 'absolute',
         visibility: 'hidden',
+        width: '100%',
+        height: '100%',
+        maxWidth: 'fit-content',
       },
     })
     document.body.appendChild(hiddenContainer)
     terminal.open(hiddenContainer)
 
     try {
-      // Use a fixed session ID for the /command route to reuse sandbox instances
-
       const sessionId = 'html-command-shared'
 
       const response = await fetch('/api/exec', {
@@ -162,16 +307,20 @@ function FreshCommandOutput(props: { command: string }) {
       const json = await response.json()
       const result = ExecResultSchema.parse(json)
 
-      // Show the command first with a prompt
       terminal.writeln(`\x1b[32m$\x1b[0m ${props.command}`)
       terminal.writeln('')
 
-      if (result.stdout) terminal.write(result.stdout)
+      if (result.stdout) {
+        terminal.write(result.stdout)
+        if (!result.stdout.endsWith('\n')) terminal.writeln('')
+      }
       if (result.stdout && result.stderr) terminal.writeln('')
       if (result.stderr) terminal.write(`\x1b[31m${result.stderr}\x1b[0m`)
-      if (result.error) terminal.write(`\x1b[31m${result.error}\x1b[0m`)
+      if (result.error)
+        terminal.write(`\x1b[31m${result.error}\x1b[0m`, () => {
+          console.error('error', result.error)
+        })
 
-      // Give terminal a moment to render
       await new Promise(resolve => setTimeout(resolve, 50))
 
       if (disposed || !serializeAddon) return
@@ -179,16 +328,14 @@ function FreshCommandOutput(props: { command: string }) {
       const rawHtml = serializeAddon.serializeAsHTML({
         includeGlobalBackground: true,
       })
-      // Extract just the content inside <pre>...</pre>
       const preMatch = rawHtml.match(/<pre[^>]*>([\s\S]*?)<\/pre>/)
       const html = preMatch ? preMatch[1] : rawHtml
-      setHtmlContent(html)
-
-      // Cleanup hidden container
-      document.body.removeChild(hiddenContainer)
+      setHtmlContent(trimHtmlLines(html))
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error))
     } finally {
+      if (document.body.contains(hiddenContainer))
+        document.body.removeChild(hiddenContainer)
       setLoading(false)
     }
   })
@@ -201,6 +348,11 @@ function FreshCommandOutput(props: { command: string }) {
 
   return (
     <main class="min-h-screen h-screen overflow-auto p-4">
+      <Show when={!props.autorun}>
+        <pre class="font-mono text-sm text-white mb-4">
+          <span style="color:#3fb950">$</span> {props.command}
+        </pre>
+      </Show>
       <Show when={loading()}>
         <div class="text-white/50">Running command...</div>
       </Show>
@@ -208,10 +360,7 @@ function FreshCommandOutput(props: { command: string }) {
         <div class="text-red-500">{error()}</div>
       </Show>
       <Show when={htmlContent()}>
-        <pre
-          class="font-mono text-sm overflow-x-auto"
-          innerHTML={htmlContent()!}
-        />
+        <pre class="font-mono text-sm" innerHTML={htmlContent()!} />
       </Show>
     </main>
   )
