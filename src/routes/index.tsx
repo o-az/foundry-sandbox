@@ -12,8 +12,7 @@ import {
   STREAMING_COMMANDS,
   INTERACTIVE_COMMANDS,
 } from '#context/session.tsx'
-import { ShareButton } from '#components/share-button.tsx'
-import { ExtraKeyboard } from '#components/extra-keyboard.tsx'
+import { Menu } from '#components/menu/index.tsx'
 import { Status, type StatusMode } from '#components/status.tsx'
 import { waitForTerminalRuntime } from '#lib/terminal/runtime.ts'
 import { useTerminalSession } from '#lib/hooks/use-terminal-session.ts'
@@ -125,12 +124,6 @@ function Page() {
       class="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <header class="relative">
         <Status mode={statusMode()} message={statusMessage()} />
-        <div class="absolute top-1 right-1 z-50">
-          <ShareButton
-            prefilledCommand={prefilledCommand()}
-            getTerminalHtml={getTerminalHtml()}
-          />
-        </div>
       </header>
 
       <div
@@ -143,23 +136,27 @@ function Page() {
           data-element="terminal"
         />
       </div>
+
+      <Menu
+        prefilledCommand={prefilledCommand()}
+        getTerminalHtml={getTerminalHtml()}
+        onVirtualKey={event => {
+          const { key, modifiers } = event.detail
+          if (!key) return
+          virtualKeyboardBridge?.sendVirtualKeyboardInput({
+            key,
+            ctrl: modifiers.includes('Control'),
+            shift: modifiers.includes('Shift'),
+          })
+        }}
+      />
+
       <footer
         id="footer"
         class="flex items-center justify-between gap-4 px-2 py-1 text-[10px] uppercase tracking-wide text-white/10 hover:text-white">
         <span class="hidden" data-todo="true">
           {sessionLabel()}
         </span>
-        <ExtraKeyboard
-          onVirtualKey={event => {
-            const { key, modifiers } = event.detail
-            if (!key) return
-            virtualKeyboardBridge?.sendVirtualKeyboardInput({
-              key,
-              ctrl: modifiers.includes('Control'),
-              shift: modifiers.includes('Shift'),
-            })
-          }}
-        />
       </footer>
     </main>
   )
