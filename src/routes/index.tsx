@@ -15,7 +15,6 @@ import {
 import { Menu } from '#components/menu/index.tsx'
 import { Status, type StatusMode } from '#components/status.tsx'
 import { waitForTerminalRuntime } from '#lib/terminal/runtime.ts'
-import { getTerminalBackground } from '#components/menu/retro.tsx'
 import { useTerminalSession } from '#lib/hooks/use-terminal-session.ts'
 import type { createVirtualKeyboardBridge } from '#lib/terminal/keyboard.ts'
 
@@ -126,23 +125,9 @@ function Page() {
       <header class="relative">
         <Status mode={statusMode()} message={statusMessage()} />
       </header>
-
-      {/** biome-ignore lint/a11y/noStaticElementInteractions: _ */}
-      {/** biome-ignore lint/a11y/useKeyWithClickEvents: _ */}
       <div
         id="terminal-container"
-        class="min-h-0 flex-1 overflow-hidden pl-4 pt-2"
-        style={{ 'background-color': getTerminalBackground() }}
-        onClick={() => {
-          // ghostty-web's textarea has pointer-events:none which prevents
-          // mobile tap-to-focus, so we manually focus on container click
-          try {
-            const textarea = (
-              window as Window & { xterm?: { textarea?: HTMLTextAreaElement } }
-            ).xterm?.textarea
-            textarea?.focus()
-          } catch {}
-        }}>
+        class="min-h-0 flex-1 overflow-hidden pl-4 pt-2">
         <div
           id="terminal"
           ref={terminalRef}

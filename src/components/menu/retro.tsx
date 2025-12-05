@@ -1,4 +1,5 @@
 import { createSignal, onMount } from 'solid-js'
+import { makeEventListener } from '@solid-primitives/event-listener'
 
 const RETRO_FONT = 'Glass TTY VT220'
 const DEFAULT_FONT = 'Lilex'
@@ -7,13 +8,50 @@ const FONT_STORAGE_KEY = 'terminal-font'
 const DEFAULT_BACKGROUND = '#0d1117'
 const RETRO_BACKGROUND = '#0a0a0a'
 
-export function isRetroMode(): boolean {
+function isRetroMode(): boolean {
   if (typeof localStorage === 'undefined') return false
   return localStorage.getItem(FONT_STORAGE_KEY) === RETRO_FONT
 }
 
-export function getTerminalBackground(): string {
+function getTerminalBackground(): string {
   return isRetroMode() ? RETRO_BACKGROUND : DEFAULT_BACKGROUND
+}
+
+/**
+ * Inline script to inject in <head> that applies retro theme immediately
+ * to prevent flash of wrong background color. Must run before paint.
+ */
+export function RetroThemeScript() {
+  const script = /* js */ `( function() {
+    var RETRO_FONT = '${RETRO_FONT}';
+    var FONT_STORAGE_KEY = '${FONT_STORAGE_KEY}';
+    var DEFAULT_BG = '${DEFAULT_BACKGROUND}';
+    var RETRO_BG = '${RETRO_BACKGROUND}';
+    var isRetro = localStorage.getItem(FONT_STORAGE_KEY) === RETRO_FONT;
+    var bg = isRetro ? RETRO_BG : DEFAULT_BG;
+    document.documentElement.style.backgroundColor = bg;
+    document.body && (document.body.style.backgroundColor = bg);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', bg);
+  })();`
+
+  // eslint-disable-next-line solid/no-innerhtml
+  return <script innerHTML={script} />
+}
+
+function applyRetroTheme() {
+  const bg = getTerminalBackground()
+
+  document.documentElement.style.backgroundColor = bg
+  document.body.style.backgroundColor = bg
+
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute('content', bg)
+
+  const terminalContainer = document.querySelector('div#terminal-container')
+  if (terminalContainer) {
+    ;(terminalContainer as HTMLElement).style.backgroundColor = bg
+  }
 }
 
 export function RetroButton() {
@@ -21,15 +59,36 @@ export function RetroButton() {
 
   onMount(() => {
     const stored = localStorage.getItem(FONT_STORAGE_KEY)
-    if (stored === RETRO_FONT) {
-      setRetroFont(true)
-    }
+    if (stored === RETRO_FONT) setRetroFont(true)
+    applyRetroTheme()
   })
 
-  function toggleRetroFont() {
+  const terminalContainerElement = document.querySelector(
+    'div#terminal-container',
+  )
+
+  onMount(() => {
+    if (!terminalContainerElement) return
+
+    makeEventListener(
+      terminalContainerElement,
+      'click',
+      _event => {
+        try {
+          window.xterm?.textarea?.focus()
+        } catch {}
+      },
+      { once: true },
+    )
+  })
+
+  function toggleRetro() {
+    if (!terminalContainerElement) return
+
     const newValue = !retroFont()
     const fontFamily = newValue ? RETRO_FONT : DEFAULT_FONT
     localStorage.setItem(FONT_STORAGE_KEY, fontFamily)
+
     // ghostty-web doesn't support font changes after open(), reload to apply
     window.location.reload()
   }
@@ -38,7 +97,7 @@ export function RetroButton() {
     <button
       type="button"
       title={retroFont() ? 'Use default font' : 'Use retro font'}
-      onClick={toggleRetroFont}
+      onClick={toggleRetro}
       class="flex size-8 items-center justify-center text-white/60 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#58a6ff]"
       classList={{
         'bg-[#58a6ff]/20 text-[#58a6ff]': retroFont(),

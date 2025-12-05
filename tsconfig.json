@@ -33,7 +33,6 @@
     "./src/**/*.tsx"
   ],
   "files": [
-    "wasm.d.ts",
     "reset.d.ts",
     "websocket.ts",
     "vite.config.ts",

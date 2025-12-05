@@ -122,7 +122,7 @@ export class TerminalManager {
     this.#terminal.open(element)
 
     // Expose terminal for debugging in development
-    ;(window as Window & { xterm?: Terminal }).xterm = this.#terminal
+    window.xterm = this.#terminal
 
     // Use FitAddon's built-in observeResize() (per ghostty-web demo)
     this.#fitAddon.fit()

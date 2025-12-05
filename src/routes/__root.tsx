@@ -14,6 +14,7 @@ import xtermCss from '@xterm/xterm/css/xterm.css?url'
 import { SessionProvider } from '#context/session.tsx'
 import { DevTools, useDevTools } from '#components/dev-tools.tsx'
 import { DefaultCatchBoundary } from '#components/default-catch-boundary.tsx'
+import { RetroThemeScript } from '#components/menu/retro.tsx'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -21,6 +22,7 @@ export const Route = createRootRoute({
       { charset: 'utf-8' },
       { name: 'description', content: '⌛ 📦' },
       { name: 'keywords', content: 'code, web, shell' },
+      { name: 'theme-color', content: '#0d1117' },
       {
         name: 'viewport',
         content:
@@ -60,6 +62,7 @@ function RootDocument({ children }: { children: Solid.JSX.Element }) {
     <html lang="en" class="h-dvh bg-[#0d1117] overflow-hidden">
       <head>
         <HydrationScript />
+        <RetroThemeScript />
         <title>Sandbox</title>
       </head>
       <body class="antialiased flex h-dvh min-h-dvh max-h-dvh flex-col overflow-hidden bg-[#0d1117] font-[Lilex] text-[#c9d1d9]">
